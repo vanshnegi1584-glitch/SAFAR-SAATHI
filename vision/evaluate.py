@@ -8,7 +8,7 @@ import time
 import cv2
 import numpy as np
 
-from core import Detector, Smoother, load_seatmap, occupancy, scaled_seats
+from core import EMPTY, OCCUPIED, Detector, SeatTracker, Smoother, load_seatmap, scaled_seats, seat_states
 
 
 def sample(args):
@@ -30,7 +30,8 @@ def sample(args):
         rows, durations = [], []
         warmed = False
         for index in indices:
-            smoothers = {rule: Smoother(args.window) for rule in ("hip", "iou")}
+            smoother = Smoother(args.window)
+            trackers = {rule: SeatTracker() for rule in ("hip", "iou")}
             # Run preceding 1 Hz samples so smoothing matches live inference.
             context = sorted(set(max(0, int(index - offset * fps)) for offset in range(args.window)))
             for frame_index in context:
@@ -44,17 +45,20 @@ def sample(args):
                     warmed = True
                 start = time.perf_counter()
                 boxes = detector.boxes(frame)
-                predictions = {}
-                for rule in ("hip", "iou"):
-                    predictions[rule] = smoothers[rule].update(min(args.capacity * 2, len(boxes)), occupancy(boxes, seats, rule, args.iou))
+                people, _ = smoother.update(min(args.capacity * 2, len(boxes)), {})
+                predictions = {rule: trackers[rule].update(seat_states(boxes, seats, rule, args.iou, detector.uncertain),
+                                                           frame_index / fps)
+                               for rule in ("hip", "iou")}
                 durations.append(time.perf_counter() - start)
             row = {"frame": int(index), "seconds": round(index / fps, 3),
-                   "people_pred": predictions["hip"][0], "people_manual": ""}
-            for rule, (_, occupied) in predictions.items():
+                   "people_pred": people, "people_manual": ""}
+            for rule, states in predictions.items():
                 if seats:
-                    row[f"{rule}_free_pred"] = len(seats) - sum(occupied.values())
-                for sid, value in occupied.items():
-                    row[f"{rule}_seat_{sid}"] = value
+                    row[f"{rule}_free_pred"] = sum(s == EMPTY for s in states.values())
+                    row[f"{rule}_unknown_pred"] = sum(s not in (EMPTY, OCCUPIED) for s in states.values())
+                for sid, state in states.items():
+                    # 1 occupied, 0 empty, u unknown (seat could not be verified)
+                    row[f"{rule}_seat_{sid}"] = {OCCUPIED: 1, EMPTY: 0}.get(state, "u")
             for sid, _ in seats:
                 row[f"manual_seat_{sid}"] = ""
             rows.append(row)
@@ -82,8 +86,10 @@ def metrics(rows, allow_partial=False):
     if not rows:
         raise ValueError("CSV has no data")
     seat_columns = [key for key in rows[0] if key.startswith("manual_seat_")]
-    people_errors, seat_hits, total_hits = [], {"hip": [], "iou": []}, {"hip": [], "iou": []}
-    missing = 0
+    rules = ("hip", "iou")
+    people_errors, missing = [], 0
+    seat = {rule: {"hits": [], "unknown": 0, "false_empty": 0, "pred_empty": 0} for rule in rules}
+    total_hits, undecided = {rule: [] for rule in rules}, {rule: 0 for rule in rules}
 
     def integer(value, name, binary=False):
         try:
@@ -107,23 +113,41 @@ def metrics(rows, allow_partial=False):
                 continue
             sid = column.removeprefix("manual_seat_")
             labels[sid] = integer(row[column], column, True)
-            for rule in ("hip", "iou"):
-                prediction = integer(row[f"{rule}_seat_{sid}"], f"{rule}_seat_{sid}", True)
-                seat_hits[rule].append(prediction == labels[sid])
+            for rule in rules:
+                raw = str(row[f"{rule}_seat_{sid}"]).strip()
+                if raw == "u":
+                    seat[rule]["unknown"] += 1
+                    continue
+                prediction = integer(raw, f"{rule}_seat_{sid}", True)
+                seat[rule]["hits"].append(prediction == labels[sid])
+                seat[rule]["pred_empty"] += prediction == 0
+                seat[rule]["false_empty"] += prediction == 0 and labels[sid] == 1
         if full:
             manual_free = len(labels) - sum(labels.values())
-            for rule in ("hip", "iou"):
-                total_hits[rule].append(integer(row[f"{rule}_free_pred"], f"{rule}_free_pred") == manual_free)
+            for rule in rules:
+                if integer(row.get(f"{rule}_unknown_pred") or 0, f"{rule}_unknown_pred"):
+                    undecided[rule] += 1
+                else:
+                    total_hits[rule].append(integer(row[f"{rule}_free_pred"], f"{rule}_free_pred") == manual_free)
     if missing and not allow_partial:
         raise ValueError(f"{missing} missing manual labels. Complete them or use --allow-partial for a provisional report.")
     percent = lambda values: 100 * sum(values) / len(values) if values else "not measured"
+    ratio = lambda part, whole: 100 * part / whole if whole else "not measured"
     return {"provisional": bool(missing), "missing_labels": missing, "frames": len(rows),
             "people": {"labelled_frames": len(people_errors), "exact_match_percent": percent([e == 0 for e in people_errors]),
                        "within_one_percent": percent([e <= 1 for e in people_errors]),
                        "mean_absolute_error": sum(people_errors) / len(people_errors) if people_errors else "not measured"},
-            "seats": {rule: {"labelled_seats": len(seat_hits[rule]), "accuracy_percent": percent(seat_hits[rule]),
-                              "fully_labelled_frames": len(total_hits[rule]), "free_total_exact_match_percent": percent(total_hits[rule])}
-                      for rule in ("hip", "iou")}}
+            "seats": {rule: {"labelled_seats": len(seat[rule]["hits"]) + seat[rule]["unknown"],
+                              "decided_seats": len(seat[rule]["hits"]),
+                              "accuracy_percent": percent(seat[rule]["hits"]),
+                              "unknown_percent": ratio(seat[rule]["unknown"], len(seat[rule]["hits"]) + seat[rule]["unknown"]),
+                              # The costly error: a seat reported free while someone sits on it.
+                              "false_empty_seats": seat[rule]["false_empty"],
+                              "false_empty_percent_of_predicted_empty": ratio(seat[rule]["false_empty"], seat[rule]["pred_empty"]),
+                              "fully_labelled_frames": len(total_hits[rule]) + undecided[rule],
+                              "frames_with_unknown_seats": undecided[rule],
+                              "free_total_exact_match_percent": percent(total_hits[rule])}
+                      for rule in rules}}
 
 
 def main():
@@ -136,7 +160,7 @@ def main():
     p.add_argument("--n", type=int, default=20)
     p.add_argument("--capacity", type=int, default=40)
     p.add_argument("--conf", type=float, default=.35)
-    p.add_argument("--imgsz", type=int, default=640)
+    p.add_argument("--imgsz", type=int, default=960)
     p.add_argument("--window", type=int, default=5)
     p.add_argument("--iou", type=float, default=.15)
     p.add_argument("--weights")

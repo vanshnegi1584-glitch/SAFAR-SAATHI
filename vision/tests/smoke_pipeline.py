@@ -49,7 +49,7 @@ def main():
         else:
             raise RuntimeError("Bridge did not start")
         subprocess.run([sys.executable, "count.py", "--source", str(video), "--seatmap", str(seatmap),
-                        "--fusion-url", url, "--duration", "8", "--interval", "1"], cwd=ROOT, check=True, timeout=45)
+                        "--fusion-url", url, "--duration", "14", "--interval", "1"], cwd=ROOT, check=True, timeout=45)
         partial = requests.get(url + "/fusion", timeout=2).json()
         assert partial["visual_seats_total"] == 2 and partial["visual_empty_seats"] == 2, partial
         assert partial["seats_free"] is None, partial

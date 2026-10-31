@@ -1,0 +1,13 @@
+vision/.venv/
+vision/__pycache__/
+vision/**/__pycache__/
+vision/.pytest_cache/
+vision/.ultralytics/
+vision/*.pt
+vision/evaluation/
+vision/*.mp4
+vision/*.avi
+vision/*.jpg
+vision/*.png
+vision/*.log
+vision/telemetry*.json

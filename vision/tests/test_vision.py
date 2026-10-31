@@ -10,7 +10,10 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from core import Smoother, load_seatmap, occupancy, scaled_seats
+import cv2
+
+from core import (FaceLiveness, Smoother, draw, split_fake_faces, drop_screen_people,
+                  liveness_crop, load_seatmap, occupancy, scaled_seats)
 from count import Publisher
 from evaluate import metrics
 from fusion import FusionConfig, fuse
@@ -27,6 +30,45 @@ def test_geometry_and_smoothing():
         smoother.update(1, {1: 1})
     assert smoother.update(0, {1: 0}) == (1, {1: 1})
     assert smoother.update(0, {1: 0}) == (0, {1: 0})
+
+
+def test_draw_free_seat_estimate_without_map(monkeypatch):
+    texts = []
+    monkeypatch.setattr(cv2, "putText", lambda img, text, *a, **k: texts.append(text))
+    draw(np.zeros((50, 50, 3), np.uint8), [], {}, 3, capacity=4)
+    draw(np.zeros((50, 50, 3), np.uint8), [], {}, 6, capacity=4)
+    assert texts == ["People: 3 | Seats free (estimate): 1/4", "People: 6 | Seats free (estimate): 0/4"]
+
+
+def test_people_on_screens_are_dropped():
+    phone = [100, 100, 200, 300]
+    on_phone = [110, 120, 190, 290]
+    holding_phone = [50, 0, 300, 600]
+    assert drop_screen_people([on_phone, holding_phone], [phone]) == [holding_phone]
+    assert drop_screen_people([on_phone], []) == [on_phone]
+    assert drop_screen_people([[0, 0, 0, 10]], []) == []
+
+
+def test_people_with_only_fake_faces_are_suspect_not_counted():
+    real_person, phone_person, back_of_head = [0, 0, 300, 600], [100, 300, 160, 420], [400, 0, 600, 600]
+    real_face, phone_face = ([100, 40, 180, 120], 0.9), ([110, 320, 150, 360], 0.1)
+    people = [real_person, phone_person, back_of_head]
+    # The real person also contains the phone face, but their own real face keeps them.
+    assert split_fake_faces(people, [real_face, phone_face]) == ([real_person, back_of_head], [phone_person])
+    assert split_fake_faces(people, [phone_face], threshold=0.05) == (people, [])
+
+
+def test_liveness_crop_stays_in_frame():
+    frame = np.zeros((100, 200, 3), np.uint8)
+    assert liveness_crop(frame, (180, 80, 20, 20)).shape == (80, 80, 3)
+    assert liveness_crop(frame, (0, 0, 150, 90)).shape == (80, 80, 3)
+
+
+def test_face_liveness_models_load():
+    models = Path(__file__).resolve().parents[1] / "models"
+    if not (models / "MiniFASNetV2.onnx").is_file():
+        pytest.skip("face liveness models not downloaded")
+    assert FaceLiveness().score(np.zeros((240, 320, 3), np.uint8)) == []
 
 
 def test_map_validation(tmp_path):
@@ -115,7 +157,7 @@ def test_bridge_validation_and_bus_isolation():
     from fastapi.testclient import TestClient
     import service
     with service.lock:
-        service.state.update(telemetry=None, visual=None)
+        service.state.update(telemetry=None, visual={})
     with TestClient(service.app) as client:
         now = time.time()
         payload = {"bus_id": "14", "timestamp": now, "count": 40, "seats_free": 0, "seats_total": 40}

@@ -10,3 +10,4 @@ evaluation/
 *.png
 *.log
 telemetry*.json
+models/*.onnx

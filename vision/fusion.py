@@ -12,6 +12,36 @@ class FusionConfig:
     max_age: float = 10.0
 
 
+SEAT_PRIORITY = {"occupied": 2, "empty": 1, "unknown": 0}
+
+
+def merge_cameras(observations, max_age=10.0, now=None):
+    """Combine fresh per-camera observations into one bus-level visual observation.
+
+    Seats are merged by seat_id, so a seat seen by two cameras counts once: any camera seeing
+    it occupied wins, then any camera seeing it empty, else it stays unknown. People counts
+    from overlapping views cannot be added, so the largest single-camera count is used.
+    """
+    now = time.time() if now is None else now
+    fresh = [o for o in observations if 0 <= now - o["timestamp"] <= max_age]
+    if len(fresh) <= 1:
+        return fresh[0] if fresh else None
+    seats = {}
+    for item in fresh:
+        for sid, state in item.get("seat_states", {}).items():
+            if SEAT_PRIORITY[state] >= SEAT_PRIORITY.get(seats.get(sid), -1):
+                seats[sid] = state
+    merged = {"timestamp": min(o["timestamp"] for o in fresh), "count": max(o["count"] for o in fresh),
+              "cameras": len(fresh), "cameras_without_seat_states": sum("seat_states" not in o for o in fresh)}
+    if seats:
+        empty = sum(s == "empty" for s in seats.values())
+        verified = empty + sum(s == "occupied" for s in seats.values())
+        merged.update(seats_unknown=len(seats) - verified, seats_mapped=len(seats))
+        if verified:
+            merged.update(seats_free=empty, seats_total=verified)
+    return merged
+
+
 def fuse(telemetry, visual, config=FusionConfig(), now=None):
     now = time.time() if now is None else now
     capacity = config.capacity
@@ -35,7 +65,8 @@ def fuse(telemetry, visual, config=FusionConfig(), now=None):
     cv_valid = fresh(visual)
     if cv_valid:
         free, total = visual.get("seats_free"), visual.get("seats_total")
-        cv_valid = type(free) is int and type(total) is int and 0 <= free <= total <= capacity and total > 0
+        cv_valid = (type(free) is int and type(total) is int and 0 <= free <= total <= capacity and total > 0
+                    and visual.get("seats_mapped", total) <= capacity)
     full_cv = cv_valid and total == capacity
     expected = max(0, capacity - pax) if ir_valid else None
     deviation = abs(expected - free) if ir_valid and full_cv else None
@@ -52,6 +83,8 @@ def fuse(telemetry, visual, config=FusionConfig(), now=None):
             "source": source, "expected_empty": expected,
             "visual_empty_seats": free if cv_valid else None,
             "visual_seats_total": total if cv_valid else None,
+            "visual_unknown_seats": visual.get("seats_unknown") if cv_valid else None,
+            "visual_seats_mapped": visual.get("seats_mapped") if cv_valid else None,
             "deviation": deviation, "recalibration_required": high,
             "motion": "stationary" if stationary else "moving" if motion_known else "unknown",
             "reason": "partial_camera_coverage" if cv_valid and not full_cv else
