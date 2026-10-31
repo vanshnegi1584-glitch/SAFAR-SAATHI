@@ -81,6 +81,50 @@ def drop_group_boxes(people, inside=0.7, min_height=0.6, apart=0.5):
     return kept
 
 
+def head_points(poses, conf=0.5):
+    """One point per pose skeleton: the mean of its visible nose/eyes/ears, else the middle of its
+    visible shoulders (someone with their back turned), else nothing. `poses` holds the first 7
+    COCO keypoints [x, y, confidence] of each skeleton."""
+    points = []
+    for kp in poses:
+        for group in (kp[0:5], kp[5:7]):
+            seen = [(x, y) for x, y, c in group if c >= conf]
+            if seen:
+                points.append((sum(x for x, _ in seen) / len(seen), sum(y for _, y in seen) / len(seen)))
+                break
+    return points
+
+
+def drop_headless_boxes(people, poses, frame_h, min_height=0.3, conf=0.5):
+    """Drop a big person box with no head of its own that touches a box that has one: a hand or arm
+    held close to the camera, which YOLO can box as a second person beside its owner.
+
+    Each head (from the pose skeletons) belongs to exactly one box: of the boxes containing it, the
+    one whose centre line is nearest. Only boxes at least `min_height` of the frame are judged, where
+    the pose model reliably finds heads; smaller, far-away people are never dropped by this."""
+    owners = set()
+    for hx, hy in head_points(poses, conf):
+        holding = [i for i, (x1, y1, x2, y2) in enumerate(people) if x1 <= hx <= x2 and y1 <= hy <= y2]
+        if holding:
+            owners.add(min(holding, key=lambda i: abs(hx - (people[i][0] + people[i][2]) / 2) / max(1e-6, people[i][2] - people[i][0])))
+
+    return [b for i, b in enumerate(people)
+            if i in owners or (b[3] - b[1]) < min_height * frame_h
+            or not any(_touching(b, people[j]) for j in owners)]
+
+
+def _touching(a, b, margin=0.05):
+    """Boxes overlap, or nearly do (within `margin` of a's width)."""
+    pad = margin * (a[2] - a[0])
+    return a[0] - pad < b[2] and b[0] < a[2] + pad and a[1] < b[3] and b[1] < a[3]
+
+
+def needs_head_check(people, frame_h, min_height=0.3):
+    """True when a big person box touches another, the only case drop_headless_boxes can change."""
+    return any((a[3] - a[1]) >= min_height * frame_h and _touching(a, b)
+               for i, a in enumerate(people) for j, b in enumerate(people) if i != j)
+
+
 def shrink_box(box, side=0.08, top=0.03):
     """A slightly tighter box: YOLO person boxes include spread arms and margin, so neighbours' boxes
     overlap even when the people do not. `side`/`top` are the share of width/height cut from each edge."""
@@ -447,7 +491,7 @@ class Detector:
     def __init__(self, weights=None, conf=0.35, imgsz=640, device="cpu",
                  screen_filter=True, screen_conf=0.25, liveness=None, live_threshold=0.5,
                  weak_conf=0.2, liveness_interval=0.0, spoof_memory=3.0, liveness_async=False, dedupe=True,
-                 nms_iou=0.6):
+                 nms_iou=0.6, pose_weights=None):
         if device == "auto":
             import torch
             device = "0" if torch.cuda.is_available() else "cpu"
@@ -472,6 +516,10 @@ class Detector:
         self.spoof_memory, self._spoofs = spoof_memory, []
         self.face_skipped = []
         self.dedupe, self.duplicates = dedupe, 0
+        # Pose model for the head check (a hand near the camera boxed as a second person); it runs
+        # only on frames where a big person box touches another.
+        self.pose = YOLO(str(pose_weights)) if pose_weights else None
+        self.head_checks = 0
         self.worker = LivenessWorker(liveness, liveness_interval) if liveness and liveness_async else None
 
     def close(self):
@@ -481,6 +529,8 @@ class Detector:
     def warmup(self, shape=(480, 640, 3)):
         """Pay CUDA/model initialisation before the first real frame, not on it."""
         self.boxes(np.zeros(shape, np.uint8))
+        if self.pose is not None:
+            self.pose.predict(np.zeros(shape, np.uint8), imgsz=640, device=self.device, verbose=False)
 
     def _predict(self, frame, classes, conf):
         result = self.model.predict(frame, classes=list(classes), conf=conf, iou=self.nms_iou,
@@ -515,6 +565,14 @@ class Detector:
             self.duplicates = len(found) + len(weak) - len(kept)
             found = [b for b in found if b in kept]
             weak = [b for b in weak if b in kept]
+            if self.pose is not None and needs_head_check(found + weak, frame.shape[0]):
+                self.head_checks += 1
+                result = self.pose.predict(frame, imgsz=640, conf=0.25, device=self.device, verbose=False)[0]
+                poses = result.keypoints.data[:, :7].cpu().numpy().tolist() if result.keypoints is not None else []
+                kept = drop_headless_boxes(found + weak, poses, frame.shape[0])
+                self.duplicates += len(found) + len(weak) - len(kept)
+                found = [b for b in found if b in kept]
+                weak = [b for b in weak if b in kept]
         if screens:
             self.screens = [r[:4].tolist() for r in rows if int(r[5]) in self.screen_classes and r[4] >= self.screen_conf]
             kept = drop_screen_people(found, self.screens)

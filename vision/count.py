@@ -173,6 +173,9 @@ def parser():
     p.add_argument("--conf", type=float, default=0.35)
     p.add_argument("--no-dedupe", action="store_true",
                    help="Keep boxes that lie almost wholly inside a bigger person box (e.g. a raised arm)")
+    p.add_argument("--no-head-check", action="store_true",
+                   help="Do not use the pose model to drop a big box with no head of its own touching a person "
+                        "(a hand held close to the camera)")
     p.add_argument("--track-confirm", type=int, default=3,
                    help="Frames a new person box must persist before it counts (anonymous tracking IDs)")
     p.add_argument("--track-forget", type=float, default=1.0,
@@ -257,6 +260,11 @@ def main():
         p.error("--camera-size must look like 1280x720")
     if not str(source).isdigit() and "://" not in str(source) and not Path(source).is_file():
         p.error(f"--source {source!r} is not a camera index, stream URL, or existing video file")
+    pose_weights = None if args.no_head_check else Path(__file__).resolve().parent / "yolov8n-pose.pt"
+    if pose_weights and not pose_weights.is_file():
+        log.warning("Head check off: %s not found (download it once with: python -c \"from ultralytics import "
+                    "YOLO; YOLO('yolov8n-pose.pt')\" in this folder)", pose_weights.name)
+        pose_weights = None
     try:
         smoother = CountStabilizer(args.count_seconds, args.count_hold)
         people_tracker = PersonTracker(confirm=args.track_confirm, forget=args.track_forget)
@@ -308,7 +316,7 @@ def main():
                                         live_threshold=args.live_threshold, weak_conf=args.weak_conf,
                                         liveness_interval=args.liveness_interval, spoof_memory=args.spoof_memory,
                                         liveness_async=True, dedupe=not args.no_dedupe,
-                                        nms_iou=args.nms_iou)
+                                        nms_iou=args.nms_iou, pose_weights=pose_weights)
                     detector.warmup()
                     last_good = time.monotonic()
                     log.info("Device %s | target %.1f FPS | seats change after %.1fs occupied / %.1fs empty / %.1fs unknown",

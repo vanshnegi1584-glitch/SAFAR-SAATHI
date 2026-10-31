@@ -192,6 +192,19 @@ UNKNOWN, pending readings are cleared, nothing is published, and the camera keep
   side and 3% of the height top and bottom, since YOLO's boxes include spread arms and margin and
   neighbours' boxes overlapped when the people did not. Seat logic keeps the full boxes. `0` turns it off.
 
+- *A hand near the camera (head check):* a hand or arm held close to the lens can be boxed as a
+  second person standing beside its owner, with the two boxes only touching, which no overlap
+  rule can tell apart from two people. Each head (nose/eyes/ears, or shoulders when someone turns
+  their back, from the YOLOv8n pose model) belongs to exactly one box; a box at least 30% of the
+  frame tall with no head of its own, touching a box that has one, is dropped. The pose model runs
+  only on frames where a big box touches another (about 10 ms each on the RTX 3050), so ordinary
+  frames cost nothing, and small far-away people are never judged. Needs `yolov8n-pose.pt` in this
+  folder (download once: `python -c "from ultralytics import YOLO; YOLO('yolov8n-pose.pt')"`);
+  without it the counter warns and runs without the check. `--no-head-check` turns it off.
+  Measured on a 55 s webcam recording (numbers only, replayed): hand held up beside the face, 1
+  person: frames with 2+ boxes **107 of 279 before, 0 after**; waving near the camera: 79 of 241
+  before, 5 after; two real people side by side: one extra frame (of 244) lost a person; back
+  turned: both people kept.
 - *Collisions:* when two people bump or cross, the detector may briefly show one merged box or lose
   the person behind. A counted person who is lost then takes back the nearest leftover box of similar
   height within one box width of where they were, so they keep their ID instead of getting a new one.

@@ -417,6 +417,26 @@ def test_box_around_two_touching_people_does_not_make_three():
     assert drop_group_boxes([front, behind]) == [front, behind]    # only one box inside: not a group
 
 
+def test_hand_near_camera_beside_its_owner_is_not_a_second_person():
+    from core import drop_headless_boxes, needs_head_check
+    H = 720
+    me, hand = [400, 200, 900, 720], [880, 80, 1280, 710]          # as in the live screenshot: boxes touch
+    nose, eyes = [650, 420, .9], [[610, 380, .9], [700, 380, .9]]
+    my_pose = [nose, *eyes, [580, 400, .8], [730, 400, .3], [520, 640, .9], [800, 640, .9]]
+    assert needs_head_check([me, hand], H)
+    assert drop_headless_boxes([me, hand], [my_pose], H) == [me]
+    # Two real people side by side keep both boxes: each has its own head.
+    friend, friend_pose = [880, 150, 1280, 720], [[1080, 330, .9]] + [[0, 0, 0]] * 4 + [[980, 520, .9], [1180, 520, .9]]
+    assert drop_headless_boxes([me, friend], [my_pose, friend_pose], H) == [me, friend]
+    # Back turned: no face points, the shoulders still give a head.
+    back = [[0, 0, .1]] * 5 + [[980, 520, .9], [1180, 520, .9]]
+    assert drop_headless_boxes([me, friend], [my_pose, back], H) == [me, friend]
+    # A small (far) box is never dropped, and an isolated box with no pose is kept.
+    far = [880, 500, 960, 700]
+    assert drop_headless_boxes([me, far], [my_pose], H) == [me, far]
+    assert drop_headless_boxes([hand], [], H) == [hand] and not needs_head_check([hand], H)
+
+
 def test_smaller_boxes_stay_centred_and_stop_neighbours_overlapping():
     from core import _box_iou, shrink_box
     a, b = [100, 0, 300, 400], [270, 0, 470, 400]                  # neighbours' boxes overlap by 30 px
