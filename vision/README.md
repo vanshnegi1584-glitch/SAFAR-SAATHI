@@ -180,6 +180,29 @@ such as a moving photo of a person (measured swinging between confidence 0.16 an
 longer toggles the count. A real change appears after about 1-2 s at 30 FPS, or on the third
 observation at 1 FPS. The preview and log also show the unsmoothed `raw` count.
 
+**Fast vs steady (`--responsive`).** The boxes in the preview are drawn on every frame without
+delay; only the *numbers* are smoothed. Simulated at 30 FPS (a real change, and a borderline
+detection that comes and goes):
+
+| Setting | Count reacts after | Flicker per 10 s (worst case: detection in ~40% of frames) | Seats change after |
+| --- | --- | --- | --- |
+| Default (steady) | 1.97 s | 0 | 1.0 s occupied / 2.0 s empty |
+| `--responsive` | 1.00 s | up to 2 | 0.7 s occupied / 1.5 s empty |
+
+Use `--responsive` for live viewing and demos; keep the default for what is sent to the backend.
+Any `--count-seconds`, `--count-hold`, `--occupy-seconds` or `--vacate-seconds` you pass still wins.
+
+**Frame rate and delay.** This webcam sends at most 30 FPS, so no setting can show more; the
+pipeline already processes ~29 of them. Measured frame age (arrival to result) is about 15-70 ms;
+the camera's own internal delay before a frame arrives is not measurable here. For better
+detection of small or distant people at the same frame rate, `--imgsz 1280` measured 28.7 FPS and
+21-28 ms frame age on this laptop's GPU (while a training run was also using it). Low light makes
+webcams lower their own frame rate, so good lighting also keeps the FPS up.
+
+```bash
+python count.py --bus 14 --source 0 --show --responsive --imgsz 1280
+```
+
 **What is published** (numbers only; never frames, faces or seat images):
 
 | Field | Meaning |
@@ -307,7 +330,7 @@ None of these thresholds has been tuned on bus footage; they are engineering def
 | Bus | `--bus` (14), `--capacity` (map, else fleet seats for the bus, else 40), `--fleet` (fleet.json), `--seatmap`, `--camera-id` (map, else main) |
 | Detection | `--conf` (0.35), `--weak-conf` (0.2), `--imgsz` (960), `--device` (auto), `--weights`, `--no-screen-filter` |
 | Seats | `--rule` (hip), `--iou` (0.15), `--occlusion` (0.5), `--reference-threshold` (0.5), `--no-reference` |
-| Smoothing | `--occupy-seconds` (1.0), `--vacate-seconds` (2.0), `--unknown-seconds` (2.0), `--agree` (0.7), `--outage-seconds` (5), `--count-seconds` (2.0), `--count-hold` (1.0) |
+| Smoothing | `--responsive`, `--occupy-seconds` (1.0; 0.7 responsive), `--vacate-seconds` (2.0; 1.5), `--unknown-seconds` (2.0), `--agree` (0.7), `--outage-seconds` (5), `--count-seconds` (2.0; 1.0), `--count-hold` (1.0; 0.5) |
 | Face liveness | `--face-liveness`, `--live-threshold` (0.5), `--liveness-interval` (0.3), `--spoof-memory` (3), `--face-max-yaw` (0.35), `--face-pitch` (0.45,0.75) |
 | Output | `--interval` (5 s between log lines and posts), `--backend`, `--fusion-url`, `--show` |
 

@@ -372,3 +372,13 @@ def test_head_region_faces_map_back_to_full_frame():
     assert np.allclose(region[:4], [585 + 10 / scale, 285 + 20 / scale, 30 / scale, 40 / scale], atol=1e-3)
     assert np.allclose(region[4:14:2], 585 + full[4:14:2] / scale, atol=1e-3)  # landmarks x
     assert np.allclose(region[5:14:2], 285 + full[5:14:2] / scale, atol=1e-3)  # landmarks y
+
+
+def test_responsive_preset_and_explicit_values():
+    import count
+    args = count.parser().parse_args([])
+    count.apply_speed_preset(args)
+    assert (args.count_seconds, args.count_hold, args.occupy_seconds, args.vacate_seconds) == (2.0, 1.0, 1.0, 2.0)
+    args = count.parser().parse_args(["--responsive", "--count-hold", "0.8"])
+    count.apply_speed_preset(args)
+    assert (args.count_seconds, args.count_hold, args.occupy_seconds, args.vacate_seconds) == (1.0, 0.8, 0.7, 1.5)
