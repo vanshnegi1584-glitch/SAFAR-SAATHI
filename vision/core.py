@@ -36,6 +36,140 @@ def drop_screen_people(people, screens, overlap=0.7):
     return kept
 
 
+def drop_part_boxes(people, inside=0.85, max_size=0.5):
+    """Drop a box that is mostly inside a bigger person box: a second detection of the same body
+    (an arm or upper body when someone raises a hand). Kept strict so a real person partly hidden
+    behind another, whose box is not almost wholly inside the other's, is still counted."""
+    area = lambda b: max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+    kept = []
+    for i, small in enumerate(people):
+        part = False
+        for j, big in enumerate(people):
+            if i == j or area(big) <= area(small) or area(small) > max_size * area(big):
+                continue
+            ix = max(0.0, min(small[2], big[2]) - max(small[0], big[0]))
+            iy = max(0.0, min(small[3], big[3]) - max(small[1], big[1]))
+            if area(small) and ix * iy / area(small) >= inside:
+                part = True
+                break
+        if not part:
+            kept.append(small)
+    return kept
+
+
+def drop_group_boxes(people, inside=0.7, min_height=0.6, apart=0.5):
+    """Drop a box drawn around two or more people standing close together, keeping their own boxes.
+
+    Without this, two touching people plus the box around both count as three. A box is a group box
+    only when at least two other boxes are mostly inside it, are each most of its height (whole people,
+    not an arm or a torso) and are side by side rather than one inside the other."""
+    area = lambda b: max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+
+    def within(a, b):  # share of a's area inside b
+        ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+        iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+        return ix * iy / area(a) if area(a) else 0.0
+
+    kept = []
+    for i, big in enumerate(people):
+        members = [b for j, b in enumerate(people) if j != i and area(b) < area(big) and within(b, big) >= inside
+                   and (b[3] - b[1]) >= min_height * (big[3] - big[1])]
+        group = any(within(a, b) < apart and within(b, a) < apart
+                    for k, a in enumerate(members) for b in members[k + 1:])
+        if not group:
+            kept.append(big)
+    return kept
+
+
+def shrink_box(box, side=0.08, top=0.03):
+    """A slightly tighter box: YOLO person boxes include spread arms and margin, so neighbours' boxes
+    overlap even when the people do not. `side`/`top` are the share of width/height cut from each edge."""
+    x1, y1, x2, y2 = box[:4]
+    dx, dy = side * (x2 - x1), top * (y2 - y1)
+    return [x1 + dx, y1 + dy, x2 - dx, y2 - dy]
+
+
+class PersonTracker:
+    """Anonymous, temporary IDs for person boxes (P1, P2, ...), matched by box overlap between frames.
+
+    No face or appearance is stored: an ID lives only while its box keeps being seen, and a person
+    who leaves for longer than `forget` seconds gets a new ID on return. IDs are never reused.
+    A track counts as a person only after `confirm` sightings (not necessarily consecutive, so a real
+    person the detector catches every other frame still counts), so a false box that appears for a
+    frame or two and vanishes is not counted.
+
+    Collisions: when two people's boxes touch, the detector can briefly lose one person or move a
+    box so far that overlap no longer matches. A counted person's track then takes back the nearest
+    leftover box of similar height within `rematch` box widths of where it was last seen, keeping
+    the old ID instead of making a new one. The count is unchanged by this; only IDs are steadier.
+    """
+    def __init__(self, match_iou=0.3, confirm=3, forget=1.0, rematch=1.0):
+        if not 0 < match_iou < 1 or confirm < 1 or forget <= 0 or rematch < 0:
+            raise ValueError("match_iou must be in (0, 1), confirm >= 1 frame, forget > 0 seconds, rematch >= 0")
+        self.match_iou, self.confirm, self.forget, self.rematch = match_iou, confirm, forget, rematch
+        self.tracks = []  # dicts: id, box, hits, last
+        self.next_id = 1
+
+    @staticmethod
+    def _match(a, b):
+        """Overlap score of the same person in consecutive frames. IoU alone fails when a box suddenly
+        grows or shrinks (an arm raised or lowered), so a box mostly containing the other also matches."""
+        ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+        iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+        smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+        inside_smaller = ix * iy / smaller if smaller > 0 else 0.0
+        return max(_box_iou(a, b), 0.8 * inside_smaller)
+
+    def update(self, boxes, now):
+        pairs = sorted(((self._match(t["box"], b), ti, bi) for ti, t in enumerate(self.tracks) for bi, b in enumerate(boxes)),
+                       reverse=True)
+        matches = []
+        used_t, used_b = set(), set()
+        for score, ti, bi in pairs:
+            if score < self.match_iou or ti in used_t or bi in used_b:
+                continue
+            matches.append((ti, bi))
+            used_t.add(ti)
+            used_b.add(bi)
+        # Second chance for counted people lost in a collision: the nearest leftover box of similar
+        # height close to where the track was last seen keeps the old ID.
+        near = []
+        for ti, t in enumerate(self.tracks):
+            if ti in used_t or t["hits"] < self.confirm:
+                continue
+            px1, py1, px2, py2 = t["box"][:4]
+            for bi, b in enumerate(boxes):
+                if bi in used_b or not 0.6 <= (b[3] - b[1]) / max(1e-6, py2 - py1) <= 1 / 0.6:
+                    continue
+                dist = math.hypot((b[0] + b[2] - px1 - px2) / 2, (b[1] + b[3] - py1 - py2) / 2)
+                if dist <= self.rematch * (px2 - px1):
+                    near.append((dist, ti, bi))
+        for _, ti, bi in sorted(near):
+            if ti not in used_t and bi not in used_b:
+                matches.append((ti, bi))
+                used_t.add(ti)
+                used_b.add(bi)
+        for ti, bi in matches:
+            t = self.tracks[ti]
+            t["box"], t["hits"], t["last"] = boxes[bi], t["hits"] + 1, now
+        for ti, t in enumerate(self.tracks):
+            if ti not in used_t:
+                t["hits"] = min(t["hits"], self.confirm)  # keep confirmation while briefly missed
+        for bi, b in enumerate(boxes):
+            if bi not in used_b:
+                self.tracks.append({"id": self.next_id, "box": b, "hits": 1, "last": now})
+                self.next_id += 1
+        self.tracks = [t for t in self.tracks if now - t["last"] <= self.forget]
+        return self.visible(now)
+
+    def visible(self, now):
+        """[(id, box, confirmed)] for tracks seen in the latest update."""
+        return [(t["id"], t["box"], t["hits"] >= self.confirm) for t in self.tracks if t["last"] == now]
+
+    def count(self, now):
+        return sum(1 for _, _, confirmed in self.visible(now) if confirmed)
+
+
 def split_fake_faces(people, faces, threshold=0.5):
     """Split people into (kept, suspect): suspect when every visible face in the box looks fake.
 
@@ -312,7 +446,8 @@ class Detector:
     """
     def __init__(self, weights=None, conf=0.35, imgsz=640, device="cpu",
                  screen_filter=True, screen_conf=0.25, liveness=None, live_threshold=0.5,
-                 weak_conf=0.2, liveness_interval=0.0, spoof_memory=3.0, liveness_async=False):
+                 weak_conf=0.2, liveness_interval=0.0, spoof_memory=3.0, liveness_async=False, dedupe=True,
+                 nms_iou=0.6):
         if device == "auto":
             import torch
             device = "0" if torch.cuda.is_available() else "cpu"
@@ -327,12 +462,16 @@ class Detector:
         self.seat_classes = tuple(ids[n] for n in SEAT_NAMES if n in ids)
         screen_filter = screen_filter and bool(self.screen_classes)  # a person-only model cannot see screens
         self.conf, self.imgsz, self.device = conf, imgsz, device
+        # YOLO's default (0.7) keeps two boxes on one close-up body that overlap 60-70%; measured live,
+        # 0.6 merged those and four people walking past each other stayed counted as four.
+        self.nms_iou = nms_iou
         self.screen_filter, self.screen_conf, self.weak_conf = screen_filter, screen_conf, weak_conf
         self.liveness, self.live_threshold, self.liveness_interval = liveness, live_threshold, liveness_interval
         self.screens, self.faces, self.uncertain, self.rejected, self.spoofed = [], [], [], 0, 0
         self._faces_at = -math.inf
         self.spoof_memory, self._spoofs = spoof_memory, []
         self.face_skipped = []
+        self.dedupe, self.duplicates = dedupe, 0
         self.worker = LivenessWorker(liveness, liveness_interval) if liveness and liveness_async else None
 
     def close(self):
@@ -344,7 +483,7 @@ class Detector:
         self.boxes(np.zeros(shape, np.uint8))
 
     def _predict(self, frame, classes, conf):
-        result = self.model.predict(frame, classes=list(classes), conf=conf,
+        result = self.model.predict(frame, classes=list(classes), conf=conf, iou=self.nms_iou,
                                     imgsz=self.imgsz, device=self.device,
                                     save=False, save_txt=False, save_crop=False,
                                     show=False, verbose=False, visualize=False)[0]
@@ -369,6 +508,13 @@ class Detector:
         people = [r for r in rows if int(r[5]) == person]
         found = [r[:4].tolist() for r in people if r[4] >= self.conf]
         weak = [r[:4].tolist() for r in people if self.weak_conf <= r[4] < self.conf]
+        if self.dedupe:
+            # One box around two touching people: keep their own boxes. One body, two boxes
+            # (e.g. a raised arm): keep the whole-body box only.
+            kept = drop_part_boxes(drop_group_boxes(found + weak))
+            self.duplicates = len(found) + len(weak) - len(kept)
+            found = [b for b in found if b in kept]
+            weak = [b for b in weak if b in kept]
         if screens:
             self.screens = [r[:4].tolist() for r in rows if int(r[5]) in self.screen_classes and r[4] >= self.screen_conf]
             kept = drop_screen_people(found, self.screens)

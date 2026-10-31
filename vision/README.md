@@ -173,6 +173,53 @@ once the new state makes up >= `--agree` (70%) of observations spanning `--occup
 Seats start UNKNOWN. After `--outage-seconds` (5) without fresh frames, every seat becomes
 UNKNOWN, pending readings are cleared, nothing is published, and the camera keeps reconnecting.
 
+**One person, one box, one ID.** Two steps keep a single body from counting twice:
+
+- *Duplicate boxes:* a box at least 85% inside a person box twice its size or larger (for example an
+  arm or upper body when someone raises a hand) is dropped; `duplicates removed` in the log counts
+  them. Kept strict so a person partly hidden behind another, whose box sticks out of the front
+  person's box, still counts. `--no-dedupe` turns it off.
+- *Anonymous tracking IDs:* each box is matched to the previous frame's boxes by overlap and keeps its
+  ID (P1, P2, ...), shown in the preview; a new person gets a new ID and IDs are never reused. A box
+  counts only after `--track-confirm` (3) sightings, so a false box that appears for a frame or two
+  is ignored, while a real person the detector catches every other frame still counts. An ID survives
+  `--track-forget` (1.0 s) out of view; after that, a returning person gets a new ID.
+- *Overlapping people:* YOLO keeps two boxes unless they overlap (IoU) at least 0.7, so a close-up
+  body sometimes got two boxes overlapping 60-70%; `--nms-iou` (0.6) merges those. A box around two
+  or more whole-height people standing side by side (a "group" box) is dropped and their own boxes
+  kept, so two touching people no longer count as three.
+- *Smaller boxes:* tracking and the preview use boxes cut by `--box-shrink` (8%) of the width on each
+  side and 3% of the height top and bottom, since YOLO's boxes include spread arms and margin and
+  neighbours' boxes overlapped when the people did not. Seat logic keeps the full boxes. `0` turns it off.
+
+- *Collisions:* when two people bump or cross, the detector may briefly show one merged box or lose
+  the person behind. A counted person who is lost then takes back the nearest leftover box of similar
+  height within one box width of where they were, so they keep their ID instead of getting a new one.
+
+Collision check (45 s recording, exactly 2 people crossing, overlapping and bumping, replayed
+offline): the shown count was **never** 3 (0% of frames, before and after), distinct IDs fell from
+6 to 5, and the count read 1 in 8% of frames, when one person was completely hidden behind the other.
+Tried and **rejected** on the same recordings: still counting a person for 0.5-1 s after they vanish
+behind someone (fixed the drop to 1, but added a false +1 in 10-51% of frames), motion prediction
+(IDs got worse, 6 to 12) and a longer wait for boxes that appear overlapping someone (more drops to 1).
+A camera mounted high, looking down the aisle, hides fewer people behind others than a webcam at
+head height.
+
+Overlap check on a 38 s webcam recording (box numbers only, replayed offline): with 4 people walking
+past each other the count was exactly 4 in 100% of frames (99% before). In the "one half behind
+another" part, people were also entering and leaving, so the true count per frame is uncertain and
+that part is **not scored**. One short recording, not a benchmark.
+
+These IDs come from body-box positions only. No face, appearance or identity is stored, so the
+system cannot and does not recognise who someone is or whether they were seen before. People who
+cross paths closely can swap IDs; the count is unaffected. Matching also accepts a box that mostly
+contains the previous one, because IoU alone dropped when an arm went up and the person got a new ID.
+Live webcam check with 3-5 people moving and raising hands: before that change IDs ran from P21 to
+P38 in about 25 s; after it, P1-P4 stayed the same for the next 18 s (one person left, P3 ended).
+Two short runs, not a benchmark. A measured hand-raise test on the webcam
+did not reproduce overlapping duplicate boxes (the extra box was a separate object in view), so the
+duplicate rule's effect on real footage is **not measured** yet.
+
 **People count smoothing.** The count shown and published is the median of the last
 `--count-seconds` (2.0) of observations (ties round up), and it changes only after that median
 has differed from the shown value for `--count-hold` (1.0) s. A detection that comes and goes,
@@ -376,6 +423,30 @@ counts. Siddhant polls `GET /fusion` for `seats_free`, `source`, `recalibration_
 `expected_empty`, `visual_empty_seats`, `visual_seats_total`, `visual_unknown_seats`,
 `visual_seats_mapped`, `cameras`, `deviation` and `motion` (the new keys are additive). Null
 availability means unknown, not zero or full. Readings expire after 10 seconds.
+
+**People on board.** `/fusion` also returns `people_on_board`, `people_source` and `camera_people`.
+`people_source` is `ir` when Rahul's door counters are fresh (they see every boarding, whole bus),
+else `camera` (only the people in view, so a lower bound), else `unavailable`. These are anonymous
+counts: no face or identity is ever sent or tracked.
+
+**Live GPS app (Vidhu's `GPS` repo).** Its tracking server already polls each bus's `/fusion` and
+relays seats, and on its `feat/people-on-board` branch also the people count, to the same rooms as
+that bus's live location, so the student app and dispatcher map show "N people on board" next to
+the bus. Configure it with the bus's tracking id and this bridge's address, and start the bridge
+with that bus's **fleet number** (its seats then come from `fleet.json` and must match the schedule):
+
+```bash
+# vision PC, bus 18 (registration UK07PA1696, 41 seats)
+VISION_BUS_ID=18 python -m uvicorn service:app --host 0.0.0.0 --port 8010
+python count.py --bus 18 --source 0 --fusion-url http://127.0.0.1:8010
+# GPS tracking server .env
+SEAT_SOURCES={"bus-uk07pa1696":"http://<vision PC address>:8010"}
+```
+
+Checked end to end on this laptop (webcam -> `count.py` -> bridge -> the GPS server's real
+`SeatPoller` over HTTP): the event carried `people_on_board` with `people_source: camera`. The full
+GPS server and app were **not** run: they need the database repo ("Bus Management System") with
+its Supabase migrations, which is not on this machine.
 
 **Multiple cameras.** Run one `count.py` per camera, each with its own map (`camera_id`, seat IDs
 from `--first-id`), all posting to the same bridge. The bridge keeps the latest fresh reading per

@@ -21,3 +21,7 @@ vision/runs/
 # Model weights downloaded by Ultralytics (e.g. its AMP check)
 weights/
 *.pt
+
+# Teammate repositories cloned inside this one (they have their own git history)
+GPS/
+Bus management system/

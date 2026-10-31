@@ -79,7 +79,17 @@ def fuse(telemetry, visual, config=FusionConfig(), now=None):
             source, available = "camera", free
     elif full_cv:
         source, available = "camera", free
+    # People on board: IR door counters see every boarding, the camera only the people in view,
+    # so a camera-only number is a lower bound. Anonymous counts only; no identities.
+    camera_people = visual.get("count") if fresh(visual) and type(visual.get("count")) is int else None
+    if ir_valid:
+        people, people_source = pax, "ir"
+    elif camera_people is not None:
+        people, people_source = camera_people, "camera"
+    else:
+        people, people_source = None, "unavailable"
     return {"timestamp": now, "seats_free": available, "capacity": capacity,
+            "people_on_board": people, "people_source": people_source, "camera_people": camera_people,
             "source": source, "expected_empty": expected,
             "visual_empty_seats": free if cv_valid else None,
             "visual_seats_total": total if cv_valid else None,

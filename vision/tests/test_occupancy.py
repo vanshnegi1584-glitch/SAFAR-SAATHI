@@ -382,3 +382,112 @@ def test_responsive_preset_and_explicit_values():
     args = count.parser().parse_args(["--responsive", "--count-hold", "0.8"])
     count.apply_speed_preset(args)
     assert (args.count_seconds, args.count_hold, args.occupy_seconds, args.vacate_seconds) == (1.0, 0.8, 0.7, 1.5)
+
+
+def test_fusion_reports_people_on_board_from_ir_then_camera():
+    cfg = FusionConfig(capacity=42)
+    ir = {"timestamp": 100., "pax": {"net_current": 30}, "gps": {"speed": 20, "sats": 8}}
+    cam = {"timestamp": 100., "count": 12}
+    out = fuse(ir, cam, cfg, now=101)
+    assert (out["people_on_board"], out["people_source"], out["camera_people"]) == (30, "ir", 12)
+    out = fuse(None, cam, cfg, now=101)  # no IR: the camera's visible count, a lower bound
+    assert (out["people_on_board"], out["people_source"]) == (12, "camera")
+    out = fuse(None, {**cam, "timestamp": 50.}, cfg, now=101)  # stale camera
+    assert (out["people_on_board"], out["people_source"], out["camera_people"]) == (None, "unavailable", None)
+
+
+def test_raised_arm_box_inside_body_is_not_a_second_person():
+    from core import drop_part_boxes
+    body, arm = [100, 50, 300, 600], [120, 50, 200, 250]          # arm box almost wholly inside the body box
+    neighbour = [280, 80, 480, 600]                                # second person standing close, overlapping a little
+    behind = [150, 0, 330, 260]                                    # person behind, half outside the front box
+    assert drop_part_boxes([body, arm]) == [body]
+    assert drop_part_boxes([body, neighbour]) == [body, neighbour]
+    assert drop_part_boxes([body, behind]) == [body, behind]       # not 85% inside: kept as a real person
+
+
+def test_box_around_two_touching_people_does_not_make_three():
+    from core import drop_group_boxes, drop_part_boxes
+    left, right = [100, 50, 300, 600], [280, 60, 480, 610]         # two people, shoulders touching
+    group = [95, 40, 485, 615]                                     # YOLO's extra box around both
+    assert drop_part_boxes(drop_group_boxes([group, left, right])) == [left, right]
+    body, arm, torso = [100, 50, 300, 600], [120, 50, 200, 250], [110, 60, 290, 350]
+    assert drop_group_boxes([body, arm, torso]) == [body, arm, torso]  # parts are short: not a group
+    front, behind = [100, 50, 400, 600], [130, 40, 380, 560]       # one directly behind the other
+    assert drop_group_boxes([front, behind]) == [front, behind]    # only one box inside: not a group
+
+
+def test_smaller_boxes_stay_centred_and_stop_neighbours_overlapping():
+    from core import _box_iou, shrink_box
+    a, b = [100, 0, 300, 400], [270, 0, 470, 400]                  # neighbours' boxes overlap by 30 px
+    sa, sb = shrink_box(a), shrink_box(b)
+    assert _box_iou(a, b) > 0 and _box_iou(sa, sb) == 0
+    assert (sa[0] + sa[2]) / 2 == 200 and (sa[1] + sa[3]) / 2 == 200
+    assert sa == pytest.approx([116, 12, 284, 388]) and shrink_box(a, 0, 0) == a
+
+
+def test_two_people_colliding_keep_their_ids_and_add_no_one():
+    from core import PersonTracker
+    t = PersonTracker(confirm=3, forget=1.0)
+    a, b = [100, 100, 300, 500], [500, 100, 700, 500]
+    for i in range(3):
+        t.update([a, b], i * 0.1)
+    t.update([[260, 100, 460, 500]], 0.3)                          # collide: one merged box, one person hidden
+    t.update([[260, 100, 460, 500]], 0.4)
+    seen = t.update([[150, 100, 350, 500], [420, 100, 620, 500]], 0.5)  # step apart, both moved ~100 px
+    assert sorted(pid for pid, _, ok in seen if ok) == [1, 2]      # same two IDs, nobody new
+    assert t.count(0.5) == 2 and t.next_id == 3
+    far = t.update([[150, 100, 350, 500], [420, 100, 620, 500], [900, 120, 1000, 450]], 0.6)
+    assert [pid for pid, _, ok in far if not ok] == [3]            # a real newcomer still gets a new ID
+
+
+def test_tracking_ids_stay_with_each_person_and_new_people_get_new_ids():
+    from core import PersonTracker
+    t = PersonTracker(confirm=3, forget=1.0)
+    a, b = [100, 100, 200, 400], [300, 100, 400, 400]
+    for i in range(3):                                             # two people, moving slightly
+        seen = t.update([[a[0] + i * 5, a[1], a[2] + i * 5, a[3]], [b[0] - i * 5, b[1], b[2] - i * 5, b[3]]], i * 0.1)
+    assert sorted(pid for pid, _, ok in seen if ok) == [1, 2] and t.count(0.2) == 2
+    seen = t.update([[a[0] + 15, a[1], a[2] + 15, a[3]]], 0.3)       # person 2 briefly hidden
+    assert [pid for pid, _, _ in seen] == [1]
+    seen = t.update([[a[0] + 20, a[1], a[2] + 20, a[3]], b], 0.4)    # person 2 back within 1 s: same ID
+    assert sorted(pid for pid, _, _ in seen) == [1, 2]
+    c = [600, 100, 700, 400]
+    seen = t.update([[a[0] + 25, a[1], a[2] + 25, a[3]], b, c], 0.5)  # a new person: new ID, not counted yet
+    assert {pid: ok for pid, _, ok in seen} == {1: True, 2: True, 3: False} and t.count(0.5) == 2
+    for k in range(2):
+        t.update([[a[0] + 25, a[1], a[2] + 25, a[3]], b, c], 0.6 + k * 0.1)
+    assert t.count(0.7) == 3
+    t.update([b], 3.0)                                              # everyone else gone for > 1 s
+    seen = t.update([b, a], 3.1)                                    # person 1 returns: new ID (no face memory)
+    assert sorted(pid for pid, _, _ in seen) == [2, 4]
+
+
+def test_brief_false_box_never_counts_but_a_flickering_real_person_does():
+    from core import PersonTracker
+    t = PersonTracker(confirm=3)
+    person, blip = [100, 100, 200, 400], [500, 100, 560, 300]
+    # A false box that shows up for 2 frames, then is gone for good: never counted.
+    counts = [t.update([person] + ([blip] if i in (5, 6) else []), i * 0.033) and t.count(i * 0.033) for i in range(40)]
+    assert max(counts) == 1
+    # A real person the detector only catches every other frame is still counted, with one stable ID.
+    t2 = PersonTracker(confirm=3)
+    ids = set()
+    for i in range(20):
+        seen = t2.update([person] + ([blip] if i % 2 else []), i * 0.033)
+        ids |= {pid for pid, _, _ in seen}
+    assert ids == {1, 2} and t2.count(19 * 0.033) == 2
+
+
+def test_raising_a_hand_keeps_the_same_id():
+    from core import PersonTracker
+    t = PersonTracker(confirm=3)
+    standing = [100, 200, 200, 500]
+    for i in range(3):
+        t.update([standing, [400, 200, 500, 500]], i * 0.033)
+    arm_up = [95, 40, 205, 500]                       # box grows ~50% taller when an arm goes up (IoU ~0.55 -> 0.45)
+    hands_up = [80, 0, 220, 500]                      # both arms: much taller and wider (IoU < 0.3)
+    for box in (arm_up, hands_up, standing):
+        seen = t.update([box, [400, 200, 500, 500]], 1.0)
+        assert sorted(pid for pid, _, _ in seen) == [1, 2]
+    assert t.count(1.0) == 2

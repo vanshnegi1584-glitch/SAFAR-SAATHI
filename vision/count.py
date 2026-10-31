@@ -11,8 +11,8 @@ import cv2
 import requests
 
 from fleet import DEFAULT_FLEET, capacity_for, load_fleet, resolve_capacity
-from core import (CountStabilizer, Detector, FaceLiveness, SeatAppearance, SeatTracker, draw, load_seatmap,
-                  scaled_seats, seat_states, summarize)
+from core import (CountStabilizer, Detector, FaceLiveness, PersonTracker, SeatAppearance, SeatTracker, draw, load_seatmap,
+                  scaled_seats, seat_states, shrink_box, summarize)
 
 log = logging.getLogger("vision")
 
@@ -171,6 +171,17 @@ def parser():
     p.add_argument("--count-hold", type=float,
                    help="People count changes only after the median differs for this many seconds")
     p.add_argument("--conf", type=float, default=0.35)
+    p.add_argument("--no-dedupe", action="store_true",
+                   help="Keep boxes that lie almost wholly inside a bigger person box (e.g. a raised arm)")
+    p.add_argument("--track-confirm", type=int, default=3,
+                   help="Frames a new person box must persist before it counts (anonymous tracking IDs)")
+    p.add_argument("--track-forget", type=float, default=1.0,
+                   help="Seconds a person can be out of view and keep the same tracking ID")
+    p.add_argument("--nms-iou", type=float, default=0.6,
+                   help="Two person boxes overlapping at least this much (IoU) are merged as one body")
+    p.add_argument("--box-shrink", type=float, default=0.08,
+                   help="Share of a person box's width cut from each side (top/bottom get 3/8 of it) before "
+                        "tracking and drawing, so neighbours' boxes stop overlapping; 0 keeps YOLO's boxes")
     p.add_argument("--weak-conf", type=float, default=0.2,
                    help="Person detections between this and --conf make a seat UNKNOWN, never counted")
     p.add_argument("--occlusion", type=float, default=0.5,
@@ -234,6 +245,8 @@ def main():
             or not 0 < args.iou <= 1 or args.imgsz < 32 or not 0 < args.live_threshold < 1
             or not 0 < args.occlusion <= 1 or not -1 <= args.reference_threshold <= 1 or args.liveness_interval < 0):
         p.error("Invalid interval, FPS, confidence, IoU, image size, occlusion, reference or liveness setting")
+    if not 0 <= args.box_shrink < 0.25 or not 0 < args.nms_iou <= 1:
+        p.error("--box-shrink must be in [0, 0.25) and --nms-iou in (0, 1]")
     source = args.source
     try:
         native = not args.camera_size or args.camera_size.lower() == "native"
@@ -246,6 +259,7 @@ def main():
         p.error(f"--source {source!r} is not a camera index, stream URL, or existing video file")
     try:
         smoother = CountStabilizer(args.count_seconds, args.count_hold)
+        people_tracker = PersonTracker(confirm=args.track_confirm, forget=args.track_forget)
         tracker = SeatTracker(args.occupy_seconds, args.vacate_seconds, args.unknown_seconds,
                               args.agree, args.outage_seconds)
         seatmap = load_seatmap(args.seatmap) if args.seatmap else None
@@ -293,7 +307,8 @@ def main():
                                         screen_filter=not args.no_screen_filter, liveness=liveness,
                                         live_threshold=args.live_threshold, weak_conf=args.weak_conf,
                                         liveness_interval=args.liveness_interval, spoof_memory=args.spoof_memory,
-                                        liveness_async=True)
+                                        liveness_async=True, dedupe=not args.no_dedupe,
+                                        nms_iou=args.nms_iou)
                     detector.warmup()
                     last_good = time.monotonic()
                     log.info("Device %s | target %.1f FPS | seats change after %.1fs occupied / %.1fs empty / %.1fs unknown",
@@ -314,6 +329,7 @@ def main():
                     last_sequence = sequence
                     if offline or tick - last_good > args.outage_seconds:
                         smoother = CountStabilizer(args.count_seconds, args.count_hold)
+                        people_tracker = PersonTracker(confirm=args.track_confirm, forget=args.track_forget)
                         offline = False
                         log.info("Frames flowing again; rebuilding seat evidence")
                     if frame.shape not in geometry:
@@ -324,7 +340,11 @@ def main():
                     if time.monotonic() - captured > 10:
                         log.warning("Inference too slow: stale observation discarded")
                         continue
-                    raw_people = min(capacity * 2, len(boxes))
+                    # Count anonymous tracked people seen for several frames, not raw boxes, so a box that
+                    # flickers or a duplicate of one body does not add to the count.
+                    tight = [shrink_box(b, args.box_shrink, args.box_shrink * 3 / 8) for b in boxes]
+                    tracked = people_tracker.update(tight, captured)
+                    raw_people = min(capacity * 2, people_tracker.count(captured))
                     people = smoother.update(raw_people, captured)
                     looks_empty = None
                     if appearance:
@@ -363,14 +383,18 @@ def main():
                                      f"{summary['unknown']} of {summary['mapped']} mapped, {summary['unverified']} "
                                      f"of {capacity} unverified" if seats else "")
                         log.info("Observation: %s%s | raw count %d | %.1f FPS | frame age %.0f ms | ignored on screens %d | "
-                                 "fake faces %d | uncertain %d", payload, seat_text, raw_people, measured_fps, age_ms,
-                                 detector.rejected, detector.spoofed, len(detector.uncertain))
+                                 "fake faces %d | uncertain %d | duplicates removed %d | IDs %s", payload, seat_text, raw_people,
+                                 measured_fps, age_ms, detector.rejected, detector.spoofed, len(detector.uncertain),
+                                 detector.duplicates, ",".join(f"P{i}" for i, _, ok in tracked if ok) or "-")
                         last_log = finished
                     if show:
                         try:
                             preview = draw(frame, seats, states, people, capacity)
-                            for x1, y1, x2, y2 in boxes:  # counted people
-                                cv2.rectangle(preview, (int(x1), int(y1)), (int(x2), int(y2)), (255, 140, 0), 2)
+                            for pid, (x1, y1, x2, y2), confirmed in tracked:  # anonymous tracking IDs
+                                color = (255, 140, 0) if confirmed else (170, 170, 170)
+                                cv2.rectangle(preview, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+                                cv2.putText(preview, f"P{pid}" + ("" if confirmed else "?"), (int(x1) + 4, int(y1) + 24),
+                                            cv2.FONT_HERSHEY_SIMPLEX, .8, color, 2)
                             for x1, y1, x2, y2 in detector.screens:
                                 cv2.rectangle(preview, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 255), 2)
                             for x1, y1, x2, y2 in detector.uncertain:
