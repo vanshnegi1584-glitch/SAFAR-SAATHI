@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ultralytics/
+*.pt
+evaluation/
+*.mp4
+*.avi
+*.jpg
+*.png
+*.log
+telemetry*.json
