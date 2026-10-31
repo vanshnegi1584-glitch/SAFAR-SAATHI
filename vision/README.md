@@ -462,6 +462,63 @@ On this laptop's RTX 3050 (6 GB), `--imgsz 960 --batch 8` is the starting point;
 memory runs out. `count.py` finds classes **by name**, so a model with `person` and `seat` works
 directly; it has no phone class, so the screen filter turns itself off with such a model.
 
+### Start with public bus-seat datasets
+
+Checked on Roboflow Universe on 31 October 2026 (numbers and licences as shown on each page):
+
+| Dataset | Images | Classes | Licence | Notes |
+| --- | --- | --- | --- | --- |
+| [Inside Bus View](https://universe.roboflow.com/seat-occupancy/inside-bus-view) (v5) | 1,378 | Occupied, Unoccupied | Public Domain | Inside a bus; no published description of where or how it was recorded |
+| [VISTA](https://universe.roboflow.com/bahadej-1ew2i/vista-model) | 452 | Occupied, Unoccupied | CC BY 4.0, but its description says research use only, no redistribution or commercial use | Wide-angle CCTV inside a Philippine bus, various lighting; includes some images from other public datasets |
+| [bus-seat-detection](https://universe.roboflow.com/kdglab/bus-seat-detection) | 152 (366 in the export with augmentation) | empty-seat-frontal | CC BY 4.0 | **Not used** (inspected): 191 of 366 images contain people while only empty seats are labelled; some boxes cover two seats at once, a seat with a backpack is labelled empty, and some boxes are not on seats. Training on it would teach the model that occupied seats are background. Usable only after re-labelling to the rules above |
+
+These label **seats as occupied or empty**, not people, so they train a separate **seat-state
+model** with classes `occupied_seat, empty_seat`, not the `person, seat` model above.
+
+**Download (you, signed in):** Roboflow requires an account to download. Open each dataset, go to
+*Dataset* -> latest version -> *Download Dataset*, choose the **YOLOv8** format, download the zip,
+and save it in `vision/datasets/downloads/` (git-ignored). Then:
+
+```bash
+python train.py import --source datasets/downloads/inside-bus-view.zip --name insidebus --map Occupied=occupied_seat,Unoccupied=empty_seat
+python train.py import --source datasets/downloads/vista.zip --name vista --map Occupied=occupied_seat,Unoccupied=empty_seat
+python train.py resplit --data datasets/seats/data.yaml --output datasets/seats_grouped
+python train.py check --data datasets/seats_grouped/data.yaml
+python train.py train --data datasets/seats_grouped/data.yaml --name seats --epochs 100
+python train.py evaluate --weights runs/seats/weights/best.pt --data datasets/seats_grouped/data.yaml --split val
+```
+
+**Why `resplit`: the downloaded splits leak.** Measured with a 256-bit image hash (two unrelated
+images differ in ~118 bits): 81% of Inside Bus View's own val and test images are within 20 bits of
+a training image, i.e. neighbouring frames of the same videos. VISTA's were 7-18%, and 318 of its 452
+original photos also appear as 2 extra flipped/cropped copies, which a hash cannot match.
+`resplit` groups images that are within 20 bits of each other (same source), plus all copies of one
+original photo (by Roboflow's `<original>_jpg.rf.<id>` names), and puts each whole group in one
+split. On these two datasets it gave 1,724 / 370 / 372 images, 0% near-duplicates across splits and
+no original photo in two splits. Frames from one video that differ by more than 20 bits can still
+land in different splits, so treat scores as an upper bound for a *new* bus.
+
+Polygon rows in an export (81 in Inside Bus View, from seats outlined instead of boxed) are
+converted to their bounding boxes on import. Images: Inside Bus View 2560x1440, VISTA 640x360.
+
+`import` unzips each archive into its own folder (refusing paths that would escape it), maps class
+**names** (every source class must be mapped, or explicitly `=drop`), prefixes files with `--name`,
+and merges into `datasets/seats/`. Use the zip file names you actually saved.
+
+**What this can and cannot tell you:**
+
+- These exports come pre-split and carry no trip information, so frames from one video may be in
+  both train and test; their scores can be **optimistic**. The leakage check only catches exact
+  duplicates.
+- They show other buses, seats and camera positions. A model that scores well on them can still
+  fail on GEHU buses, so the only score that counts is one on **your own labelled bus frames**,
+  which this data does not replace. Use it to get started, then add your own trips.
+- A seat-state model has no `person` class, so `count.py --weights` refuses it (person counting
+  stays on yolov8n). Using its occupied/empty boxes as extra evidence for calibrated seats, for
+  example passengers hidden behind seat backs, is a possible next step and is **not implemented**.
+- Keep VISTA's research-only condition: use it for this academic project, do not redistribute it,
+  and do not commit downloaded data (`vision/datasets/` is git-ignored).
+
 ## Measure speed
 
 ```bash

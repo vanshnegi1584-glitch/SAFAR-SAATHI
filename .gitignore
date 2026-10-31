@@ -18,3 +18,6 @@ SafarSaathi_Bus_Schedule.csv
 # Training data (bus images may show passengers)
 vision/datasets/
 vision/runs/
+# Model weights downloaded by Ultralytics (e.g. its AMP check)
+weights/
+*.pt

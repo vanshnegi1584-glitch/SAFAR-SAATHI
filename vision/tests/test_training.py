@@ -62,3 +62,84 @@ def test_labels_folder_and_matching():
     truths = [(0, [1, 1, 10, 10]), (1, [0, 0, 5, 5])]
     assert match(preds, truths) == {0: [1, 1, 0], 1: [0, 1, 1]}  # duplicate box is a false positive
     assert scores(1, 1, 0) == {"tp": 1, "fp": 1, "fn": 0, "precision": .5, "recall": 1.0, "f1": .667}
+
+
+def roboflow_export(root, classes=("Occupied", "Unoccupied")):
+    """A tiny export laid out like Roboflow's 'YOLOv8' download."""
+    for folder, value in (("train", 10), ("valid", 90), ("test", 170)):
+        (root / folder / "images").mkdir(parents=True)
+        (root / folder / "labels").mkdir(parents=True)
+        cv2.imwrite(str(root / folder / "images" / f"bus_{folder}_jpg.rf.abc.jpg"), np.full((32, 32, 3), value, np.uint8))
+        (root / folder / "labels" / f"bus_{folder}_jpg.rf.abc.txt").write_text("0 0.5 0.5 0.2 0.2\n1 0.2 0.2 0.1 0.1\n")
+    (root / "data.yaml").write_text("train: ../train/images\nval: ../valid/images\ntest: ../test/images\n"
+                                    f"nc: {len(classes)}\nnames: {list(classes)}\n")
+    return root
+
+
+def test_import_roboflow_export_remaps_and_merges(tmp_path):
+    import zipfile
+    from train import check_dataset, import_export, parse_mapping, safe_extract
+    export = roboflow_export(tmp_path / "export")
+    archive = tmp_path / "inside-bus-view.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for f in export.rglob("*"):
+            zf.write(f, f.relative_to(export))
+    folder = safe_extract(archive, tmp_path / "unzipped")
+    names, out = ["occupied_seat", "empty_seat"], tmp_path / "seats"
+    report = import_export(folder, "insidebus", parse_mapping("Occupied=empty_seat,Unoccupied=occupied_seat"), names, out)
+    assert report["images"] == {"train": 1, "val": 1, "test": 1} and report["boxes"] == {"occupied_seat": 3, "empty_seat": 3}
+    label = (out / "labels" / "val" / "insidebus__bus_valid_jpg.rf.abc.txt").read_text().splitlines()
+    assert label[0].startswith("1 ") and label[1].startswith("0 ")  # classes renamed by name, not by index
+    second = roboflow_export(tmp_path / "vista", classes=("Occupied", "Unoccupied"))
+    for split, value in (("train", 210), ("valid", 220), ("test", 230)):  # distinct pixels: no false leakage
+        img = next((second / split / "images").iterdir())
+        cv2.imwrite(str(img), np.full((32, 32, 3), value, np.uint8))
+    import_export(second, "vista", parse_mapping("Occupied=occupied_seat,Unoccupied=empty_seat"), names, out)
+    assert check_dataset(out / "data.yaml")["splits"]["train"]["images"] == 2
+    with pytest.raises(ValueError, match="already contains 'vista'"):
+        import_export(second, "vista", parse_mapping("Occupied=occupied_seat,Unoccupied=empty_seat"), names, out)
+    with pytest.raises(ValueError, match="No --map entry"):
+        import_export(second, "other", parse_mapping("Occupied=occupied_seat"), names, tmp_path / "x")
+
+
+def test_zip_cannot_write_outside_its_folder(tmp_path):
+    import zipfile
+    from train import safe_extract
+    archive = tmp_path / "evil.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("../escaped.txt", "x")
+    with pytest.raises(ValueError, match="escapes"):
+        safe_extract(archive, tmp_path / "out")
+    assert not (tmp_path / "escaped.txt").exists()
+
+
+def test_import_converts_polygon_rows_and_leaves_nothing_on_error(tmp_path):
+    from train import import_export, parse_mapping, read_export_label
+    label = tmp_path / "a.txt"
+    label.write_text("1 0.2 0.2 0.4 0.2 0.4 0.6 0.2 0.6\n0 0.5 0.5 0.1 0.1\n")
+    rows, converted = read_export_label(label, 2)
+    assert converted == 1 and np.allclose(rows[0], (1, 0.3, 0.4, 0.2, 0.4)) and rows[1] == (0, .5, .5, .1, .1)
+    export = roboflow_export(tmp_path / "export")
+    (export / "test" / "labels" / "bus_test_jpg.rf.abc.txt").write_text("0 0.5 0.5\n")  # broken file, last split
+    with pytest.raises(ValueError, match="expected"):
+        import_export(export, "x", parse_mapping("Occupied=occupied_seat,Unoccupied=empty_seat"),
+                      ["occupied_seat", "empty_seat"], tmp_path / "out")
+    assert not (tmp_path / "out").exists()  # validated first: no partial copy
+
+
+def test_resplit_groups_near_duplicates_and_augmented_copies():
+    from train import leakage_report, near_duplicate_groups, original_name
+    assert original_name("vista__IMG_0042_jpg.rf.9f8e7d.jpg") == original_name("vista__IMG_0042_jpg.rf.123abc.jpg") == "IMG_0042"
+    rng = np.random.default_rng(0)
+    a = rng.integers(0, 2, 256).astype(bool)
+    a_next = a.copy(); a_next[:5] = ~a_next[:5]           # next video frame: 5 bits differ
+    b = rng.integers(0, 2, 256).astype(bool)               # unrelated scene
+    flipped = rng.integers(0, 2, 256).astype(bool)         # augmented copy of b: hash unrelated, same original
+    hashes = [a, a_next, b, flipped, a.copy()]
+    sources = ["insidebus", "insidebus", "vista", "vista", "vista"]
+    originals = ["f1", "f2", "IMG_7", "IMG_7", "other"]
+    groups = near_duplicate_groups(hashes, sources, 20, originals)
+    assert groups[0] == groups[1] and groups[2] == groups[3] and groups[0] != groups[2]
+    assert groups[4] != groups[0]  # same pixels but another source: kept apart (different buses)
+    report = leakage_report(hashes, ["train", "test", "train", "val", "train"], sources)
+    assert report["test/insidebus"]["near_duplicate_of_train_percent"] == 100.0

@@ -9,7 +9,9 @@ import hashlib
 import json
 from pathlib import Path
 import random
+import re
 import shutil
+import zipfile
 
 import cv2
 import numpy as np
@@ -156,6 +158,230 @@ def write_data_yaml(folder, names):
     (Path(folder) / "data.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+# ---------- import (public datasets) ----------
+
+ROBOFLOW_SPLITS = {"train": "train", "valid": "val", "val": "val", "test": "test"}
+
+
+def safe_extract(archive, target):
+    """Unzip into an empty folder, refusing paths that would escape it. Nothing in it is executed."""
+    target = Path(target)
+    if target.exists() and any(target.iterdir()):
+        raise ValueError(f"{target} is not empty; extract each archive into its own new folder")
+    target.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive) as zf:
+        for member in zf.namelist():
+            resolved = (target / member).resolve()
+            if not str(resolved).startswith(str(target.resolve())):
+                raise ValueError(f"Archive entry escapes the folder: {member}")
+        zf.extractall(target)
+    return target
+
+
+def parse_mapping(text):
+    """'Occupied=occupied_seat,Unoccupied=empty_seat,Other=drop' -> {source: target or None}."""
+    mapping = {}
+    for item in filter(None, (part.strip() for part in text.split(","))):
+        source, sep, target = item.partition("=")
+        if not sep or not source.strip() or not target.strip():
+            raise ValueError(f"--map entries look like Source=target, got {item!r}")
+        mapping[source.strip().lower()] = None if target.strip().lower() == "drop" else target.strip()
+    return mapping
+
+
+def import_export(source, name, mapping, names, output):
+    """Copy a YOLO-format export (e.g. Roboflow 'YOLOv8') into our dataset, renaming classes.
+
+    Keeps the export's own train/valid/test assignment: public exports carry no trip
+    information, so frames of one video may sit in two splits and their scores can be optimistic.
+    Returns per-split image counts and per-class box counts.
+    """
+    import yaml
+    source, output = Path(source), Path(output)
+    yamls = list(source.rglob("data.yaml"))
+    if len(yamls) != 1:
+        raise ValueError(f"Expected one data.yaml in {source}, found {len(yamls)}")
+    root = yamls[0].parent
+    meta = yaml.safe_load(yamls[0].read_text(encoding="utf-8"))
+    src_names = meta["names"]
+    src_names = [src_names[i] for i in sorted(src_names)] if isinstance(src_names, dict) else list(src_names)
+    unmapped = [n for n in src_names if n.lower() not in mapping]
+    if unmapped:
+        raise ValueError(f"No --map entry for source classes {unmapped}; map each to one of {names} or 'drop'")
+    bad = sorted({t for t in mapping.values() if t is not None and t not in names})
+    if bad:
+        raise ValueError(f"--map targets {bad} are not in --names {names}")
+    remap = {i: (None if mapping[n.lower()] is None else names.index(mapping[n.lower()])) for i, n in enumerate(src_names)}
+    if (output / "data.yaml").is_file():
+        existing = read_data(output / "data.yaml")[1]
+        if existing != names:
+            raise ValueError(f"{output} already holds classes {existing}, not {names}")
+    prefix = name.replace(TRIP_SEPARATOR, "_")
+    if any((output / "images").rglob(f"{prefix}{TRIP_SEPARATOR}*")) if (output / "images").exists() else False:
+        raise ValueError(f"{output} already contains '{prefix}' images; use another --name")
+    counts, boxes, dropped, polygons = {s: 0 for s in SPLITS}, [0] * len(names), 0, 0
+    planned = []  # validate every label before copying anything, so a bad file leaves no partial import
+    for folder, split_name in ROBOFLOW_SPLITS.items():
+        image_dir = root / folder / "images"
+        if not image_dir.is_dir():
+            continue
+        for image in sorted(p for p in image_dir.iterdir() if p.suffix.lower() in IMAGE_TYPES):
+            label = root / folder / "labels" / f"{image.stem}.txt"
+            rows, converted = read_export_label(label, len(src_names)) if label.is_file() else ([], 0)
+            polygons += converted
+            lines = []
+            for cls, cx, cy, w, h in rows:
+                target = remap[cls]
+                if target is None:
+                    dropped += 1
+                    continue
+                boxes[target] += 1
+                lines.append(f"{target} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+            planned.append((image, split_name, f"{prefix}{TRIP_SEPARATOR}{image.stem}", lines))
+            counts[split_name] += 1
+    if not planned:
+        raise ValueError(f"No images found under {root}/train|valid|test/images")
+    for image, split_name, stem, lines in planned:
+        (output / "images" / split_name).mkdir(parents=True, exist_ok=True)
+        (output / "labels" / split_name).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(image, output / "images" / split_name / f"{stem}{image.suffix.lower()}")
+        (output / "labels" / split_name / f"{stem}.txt").write_text("".join(f"{line}\n" for line in lines))
+    write_data_yaml(output, names)
+    return {"images": counts, "boxes": dict(zip(names, boxes)), "dropped_boxes": dropped,
+            "polygons_converted_to_boxes": polygons}
+
+
+def read_export_label(path, n_classes):
+    """Export label rows as boxes. Some exports mix polygon rows ('class x1 y1 x2 y2 ...', from
+    seats outlined instead of boxed) into detection labels; each becomes its bounding box,
+    as Ultralytics does when it trains. Returns (rows, number of polygons converted)."""
+    rows, converted = [], 0
+    for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        parts = line.split()
+        if len(parts) > 5 and len(parts) % 2 == 1:
+            try:
+                cls, points = int(parts[0]), np.array([float(v) for v in parts[1:]]).reshape(-1, 2)
+            except ValueError:
+                raise ValueError(f"{Path(path).name}:{number}: not numbers") from None
+            if not 0 <= cls < n_classes or points.min() < 0 or points.max() > 1:
+                raise ValueError(f"{Path(path).name}:{number}: bad polygon (class or coordinates out of range)")
+            (x1, y1), (x2, y2) = points.min(axis=0), points.max(axis=0)
+            if x2 > x1 and y2 > y1:
+                rows.append((cls, (x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1))
+                converted += 1
+            continue
+        rows += parse_label_line(line, n_classes, f"{Path(path).name}:{number}")
+    return rows, converted
+
+
+def import_dataset(args):
+    source = Path(args.source)
+    if source.suffix.lower() == ".zip":
+        source = safe_extract(source, Path(args.extract_to) if args.extract_to else source.with_suffix(""))
+    names = [n.strip() for n in args.names.split(",") if n.strip()]
+    report = import_export(source, args.name, parse_mapping(args.map), names, Path(args.output))
+    print(json.dumps({"dataset": args.name, **report}, indent=2))
+    if report["dropped_boxes"]:
+        print("Warning: dropped boxes leave those objects unlabelled in the images, which teaches the model "
+              "to ignore them. Prefer mapping or not importing such a dataset.")
+
+
+# ---------- resplit (near-duplicate groups) ----------
+
+def image_hash(path):
+    """256-bit difference hash: near-identical frames differ in only a few bits."""
+    gray = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        raise ValueError(f"Cannot read image {path}")
+    small = cv2.resize(gray, (17, 16), interpolation=cv2.INTER_AREA)
+    return (small[:, 1:] > small[:, :-1]).flatten()
+
+
+def original_name(path):
+    """Roboflow names augmented copies '<original>_jpg.rf.<id>'; strip that to find the source photo."""
+    stem = Path(path).stem.split(TRIP_SEPARATOR, 1)[-1]
+    return re.sub(r"_(jpg|jpeg|png|bmp)\.rf\.[0-9a-f]+$", "", stem, flags=re.IGNORECASE)
+
+
+def near_duplicate_groups(hashes, sources, threshold=20, originals=None):
+    """Union images of the same source whose hashes differ by <= threshold bits, and all copies of
+    one original photo (flipped or cropped augmentations hash very differently); returns group ids.
+
+    Frames from one video chain together, so a whole recording usually ends up in one group,
+    which is what an honest split needs (like keeping a trip together).
+    """
+    parent = list(range(len(hashes)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    first = {}
+    for i, key in enumerate(zip(sources, originals or range(len(hashes)))):
+        if key in first:
+            parent[find(i)] = find(first[key])
+        first.setdefault(key, i)
+
+    matrix = np.asarray(hashes)
+    sources = np.asarray(sources)
+    for i in range(len(matrix)):
+        close = np.nonzero(((matrix[i + 1:] != matrix[i]).sum(axis=1) <= threshold)
+                           & (sources[i + 1:] == sources[i]))[0] + i + 1
+        for j in close:
+            parent[find(j)] = find(i)
+    return [find(i) for i in range(len(matrix))]
+
+
+def leakage_report(hashes, splits, sources, threshold=20):
+    """Share of val/test images with a near-duplicate in train, per source."""
+    matrix, splits, sources = np.asarray(hashes), np.asarray(splits), np.asarray(sources)
+    train = matrix[splits == "train"]
+    report = {}
+    for s in ("val", "test"):
+        for src in sorted(set(sources)):
+            rows = matrix[(splits == s) & (sources == src)]
+            if len(rows) and len(train):
+                nearest = np.array([(train != r).sum(axis=1).min() for r in rows])
+                report[f"{s}/{src}"] = {"images": len(rows), "near_duplicate_of_train_percent":
+                                        round(100 * float((nearest <= threshold).mean()), 1)}
+    return report
+
+
+def resplit(args):
+    base, names, dirs = read_data(args.data)
+    output = Path(args.output)
+    if output.exists():
+        raise ValueError(f"{output} already exists; choose a new --output")
+    items = []
+    for s, image_dir in dirs.items():
+        for image in sorted(p for p in image_dir.glob("*") if p.suffix.lower() in IMAGE_TYPES):
+            items.append((image, labels_for(image_dir) / f"{image.stem}.txt", s, trip_of(image) or "unknown"))
+    hashes = [image_hash(image) for image, *_ in items]
+    sources = [src for *_, src in items]
+    before = leakage_report(hashes, [s for _, _, s, _ in items], sources, args.threshold)
+    groups = near_duplicate_groups(hashes, sources, args.threshold, [original_name(i) for i, *_ in items])
+    sizes = {}
+    for g in groups:
+        sizes[g] = sizes.get(g, 0) + 1
+    assignment, counts = assign_splits(sizes, args.val, args.test, args.seed)
+    new_splits = [assignment[g] for g in groups]
+    for (image, label, _, _), s in zip(items, new_splits):
+        (output / "images" / s).mkdir(parents=True, exist_ok=True)
+        (output / "labels" / s).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(image, output / "images" / s / image.name)
+        shutil.copy2(label, output / "labels" / s / label.name) if label.is_file() else \
+            (output / "labels" / s / label.name).write_text("")
+    write_data_yaml(output, names)
+    per_source = {s: {src: sum(1 for ns, so in zip(new_splits, sources) if ns == s and so == src)
+                      for src in sorted(set(sources))} for s in SPLITS}
+    print(json.dumps({"groups": len(sizes), "largest_group": max(sizes.values()), "images": counts,
+                      "images_by_source": per_source, "leakage_before": before,
+                      "leakage_after": leakage_report(hashes, new_splits, sources, args.threshold),
+                      "data": str(output / "data.yaml")}, indent=2))
+
+
 # ---------- check ----------
 
 def read_data(data_path):
@@ -176,25 +402,30 @@ def labels_for(image_dir):
     return Path(*parts)
 
 
+def parse_label_line(line, n_classes, where):
+    """[] for a blank line, else [(class, cx, cy, w, h)]; raises ValueError naming `where`."""
+    parts = line.split()
+    if not parts:
+        return []
+    if len(parts) != 5:
+        raise ValueError(f"{where}: expected 'class cx cy w h', got {line!r}")
+    try:
+        cls, values = int(parts[0]), [float(v) for v in parts[1:]]
+    except ValueError:
+        raise ValueError(f"{where}: not numbers: {line!r}") from None
+    if not 0 <= cls < n_classes:
+        raise ValueError(f"{where}: class {cls} outside 0-{n_classes - 1}")
+    cx, cy, w, h = values
+    if not (0 <= cx <= 1 and 0 <= cy <= 1 and 0 < w <= 1 and 0 < h <= 1):
+        raise ValueError(f"{where}: coordinates must be normalised to 0-1 with positive size")
+    return [(cls, cx, cy, w, h)]
+
+
 def parse_label(path, n_classes):
     """[(class, cx, cy, w, h)] from a YOLO txt file; raises ValueError with the line on bad input."""
     rows = []
     for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        parts = line.split()
-        if len(parts) != 5:
-            raise ValueError(f"{path.name}:{number}: expected 'class cx cy w h', got {line!r}")
-        try:
-            cls, values = int(parts[0]), [float(v) for v in parts[1:]]
-        except ValueError:
-            raise ValueError(f"{path.name}:{number}: not numbers: {line!r}") from None
-        if not 0 <= cls < n_classes:
-            raise ValueError(f"{path.name}:{number}: class {cls} outside 0-{n_classes - 1}")
-        cx, cy, w, h = values
-        if not (0 <= cx <= 1 and 0 <= cy <= 1 and 0 < w <= 1 and 0 < h <= 1):
-            raise ValueError(f"{path.name}:{number}: coordinates must be normalised to 0-1 with positive size")
-        rows.append((cls, cx, cy, w, h))
+        rows += parse_label_line(line, n_classes, f"{Path(path).name}:{number}")
     return rows
 
 
@@ -369,6 +600,20 @@ def main():
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--allow-frame-split", action="store_true")
     s.add_argument("--allow-unlabelled", action="store_true")
+    m = subs.add_parser("import", help="Add a downloaded YOLO-format export (e.g. Roboflow) to a dataset")
+    m.add_argument("--source", required=True, help="Export .zip or its extracted folder")
+    m.add_argument("--name", required=True, help="Short dataset name used as a file prefix, e.g. insidebus")
+    m.add_argument("--map", required=True, help="Source=target class pairs, e.g. Occupied=occupied_seat,Unoccupied=empty_seat")
+    m.add_argument("--names", default="occupied_seat,empty_seat", help="Target classes in index order")
+    m.add_argument("--output", default=str(ROOT / "datasets" / "seats"))
+    m.add_argument("--extract-to", help="Folder for the unzipped export (default: next to the zip)")
+    r = subs.add_parser("resplit", help="Re-split a dataset so near-duplicate frames stay in one split")
+    r.add_argument("--data", required=True)
+    r.add_argument("--output", required=True)
+    r.add_argument("--threshold", type=int, default=20, help="Max differing bits (of 256) for near-duplicates")
+    r.add_argument("--val", type=float, default=0.15)
+    r.add_argument("--test", type=float, default=0.15)
+    r.add_argument("--seed", type=int, default=0)
     c = subs.add_parser("check", help="Validate labels, class counts and leakage")
     c.add_argument("--data", default=str(ROOT / "datasets" / "bus" / "data.yaml"))
     t = subs.add_parser("train", help="Fine-tune YOLO (runs check first)")
@@ -394,7 +639,8 @@ def main():
     v.add_argument("--device", default="auto")
     args = p.parse_args()
     try:
-        {"extract": extract, "split": split, "check": check, "train": train, "evaluate": evaluate}[args.command](args)
+        {"extract": extract, "split": split, "import": import_dataset, "resplit": resplit, "check": check, "train": train,
+         "evaluate": evaluate}[args.command](args)
     except (ValueError, OSError, KeyError) as exc:
         p.error(str(exc))
 
