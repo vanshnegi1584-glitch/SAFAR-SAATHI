@@ -55,6 +55,34 @@ listed under [Photos, screens and face liveness](#photos-screens-and-face-livene
 References: [PyTorch installer](https://pytorch.org/get-started/locally/),
 [Ultralytics prediction options](https://docs.ultralytics.com/modes/predict/).
 
+## Bus fleet (seats per bus from the transport schedule)
+
+`fleet.json` lists every bus's number, registration, route, shift and **seats** (capacity),
+built from the transport department's schedule CSV:
+
+```bash
+python fleet.py build --schedule ../SafarSaathi_Bus_Schedule.csv
+python fleet.py show --bus 14
+```
+
+The schedule has 97 buses on 30 routes with 40-60 seats each (4,786 in total). It also contains
+drivers' names and phone numbers: `fleet.py` **does not copy them**, and the schedule CSV is
+git-ignored so it is never pushed. Re-run `build` whenever the schedule changes.
+
+With `fleet.json` present, capacity no longer has to be typed:
+
+- `count.py` uses `--capacity` if given; otherwise the seat map's capacity and the fleet's seats for
+  `--bus` must agree (a map calibrated for a 45-seat bus is refused on a 41-seat bus); otherwise
+  the fleet value; otherwise 40. The log says which source was used.
+- `calibrate.py` stores the fleet's seats for `--bus` in the map unless `--capacity` is given.
+- The bridge (`service.py`) uses `VISION_CAPACITY` if set, else the fleet's seats for `VISION_BUS_ID`.
+  Before this, a 60-seat bus on the default 40 would have had its camera readings rejected.
+- `--fleet none` ignores the file.
+
+The schedule's seat numbers are capacities, not training data: they contain no images, so they
+cannot teach a detector what a seat looks like. Training is covered in
+[Train on your own bus photos](#train-on-your-own-bus-photos).
+
 ## How it works
 
 ```
@@ -167,7 +195,7 @@ free <= total, omitted when no seat is verified). **Semantics change:** `seats_t
 reported free. The `seat_source` rule still works: `seats_total == capacity` only when every bus
 seat is verified (`camera`); otherwise the backend estimates the rest (`camera_partial`).
 
-**Capacity vs coverage.** `--capacity` (default: the map's `capacity`, else 40) is the whole bus.
+**Capacity vs coverage.** `--capacity` (default: the map's `capacity`, else the fleet's seats for `--bus`, else 40) is the whole bus.
 Example log for a 60-seat bus where one camera maps 35 seats:
 `seats empty 12 occupied 21 unknown 2 of 35 mapped, 27 of 60 unverified`.
 Only the 33 verified seats are camera results; the other 27 were not visually verified, and
@@ -276,7 +304,7 @@ None of these thresholds has been tuned on bus footage; they are engineering def
 | Group | Option (default) |
 | --- | --- |
 | Input | `--source` (0), `--camera-size` (1280x720), `--sample-fps` (30 with `--show`, else 1), `--duration` |
-| Bus | `--bus` (14), `--capacity` (map, else 40), `--seatmap`, `--camera-id` (map, else main) |
+| Bus | `--bus` (14), `--capacity` (map, else fleet seats for the bus, else 40), `--fleet` (fleet.json), `--seatmap`, `--camera-id` (map, else main) |
 | Detection | `--conf` (0.35), `--weak-conf` (0.2), `--imgsz` (960), `--device` (auto), `--weights`, `--no-screen-filter` |
 | Seats | `--rule` (hip), `--iou` (0.15), `--occlusion` (0.5), `--reference-threshold` (0.5), `--no-reference` |
 | Smoothing | `--occupy-seconds` (1.0), `--vacate-seconds` (2.0), `--unknown-seconds` (2.0), `--agree` (0.7), `--outage-seconds` (5), `--count-seconds` (2.0), `--count-hold` (1.0) |
@@ -295,6 +323,7 @@ VISION_BUS_ID=14 VISION_CAPACITY=40 python -m uvicorn service:app --host 127.0.0
 ```
 
 PowerShell uses `$env:VISION_BUS_ID='14'` and `$env:VISION_CAPACITY='40'` before the command.
+Without `VISION_CAPACITY`, the bridge takes the bus's seats from `fleet.json` (42 for bus 14).
 Interactive docs: `http://127.0.0.1:8010/docs`. The service is an in-memory local integration
 bridge, not the team's production backend. Restart clears state. Do not use multiple workers:
 they would have independent snapshots. Keep it on localhost or put a secured, authenticated
@@ -381,6 +410,58 @@ footage only. Record before/after parameters and metrics, freeze the settings, t
 separate held-out test once. No tuning or rule superiority is claimed yet. Twenty frames are
 only a small demo evaluation.
 
+## Train on your own bus photos
+
+The stock yolov8n was trained on everyday photos, not bus interiors seen from a ceiling camera,
+and it has no bus-seat class. Fine-tuning on labelled frames from your buses can improve person
+detection there and add a `seat` class for automatic calibration proposals. **This needs real
+labelled images; the pipeline is ready, the data is not.** It has been run end to end only on a
+synthetic dataset (coloured shapes), which proves the steps work, not that a model is good.
+
+```bash
+# 1. Sample frames from recorded trips (one video per trip; faces are blurred by default)
+python train.py extract --video recordings/bus14_morning.mp4 --every 2
+python train.py extract --video recordings/bus14_evening.mp4 --every 2
+# 2. Label datasets/unlabelled/ in any tool that exports YOLO .txt files (e.g. Label Studio, CVAT)
+# 3. Split by trip, check, train, evaluate
+python train.py split --images datasets/unlabelled --labels datasets/labels
+python train.py check
+python train.py train --epochs 100
+python train.py evaluate --weights runs/bus/weights/best.pt --baseline yolov8n.pt --split val
+# 4. Use it
+python count.py --weights runs/bus/weights/best.pt --show
+```
+
+**What to record.** Video from the camera position you will deploy, on several different trips:
+morning and evening light, empty, half-full and crowded, people seated, standing and leaning,
+backs of heads, masks, bags on seats. Several hundred labelled frames over 10 or more trips is a
+reasonable first target; more variety matters more than more frames of the same trip. Record only
+with permission, keep everything in the git-ignored `vision/datasets/`, and do not share it.
+
+**How to label** (classes in this order: `0 person`, `1 seat`):
+
+- `person`: a box around the **visible** part of every person, including partial bodies, people
+  facing away and standing passengers. Skip people who are less than about a quarter visible.
+- `seat`: a box around each **individual** seat (never a whole row), when at least about a third of
+  it is visible, occupied or not.
+- Be consistent: the model learns your labelling rules, including their mistakes.
+
+**What each step guards against:**
+
+| Step | Check |
+| --- | --- |
+| `extract` | Faces pixelated (needs the YuNet model file; `--no-blur-faces` only for consented footage); frames named `<trip>__f<frame>` |
+| `split` | Whole trips go to one split, because frames of one trip are near-duplicates and would leak test data into training; needs at least 3 trips; never overwrites a dataset |
+| `check` | Malformed lines, class ids out of range, coordinates outside 0-1, images without labels, identical images in two splits, a class with no training boxes |
+| `train` | Runs `check` first; fixed seed; stops after `--patience` (20) epochs without validation improvement; saves under the git-ignored `vision/runs/` |
+| `evaluate` | Precision, recall and F1 per class at IoU 0.5, and people-count error per image, for your model **and** the stock model on the same images |
+
+Choose settings on the `val` split; run `--split test` once at the end and report that number.
+The first training run downloads a small font (Arial.ttf) used by Ultralytics, so it needs internet.
+On this laptop's RTX 3050 (6 GB), `--imgsz 960 --batch 8` is the starting point; lower `--batch` if
+memory runs out. `count.py` finds classes **by name**, so a model with `person` and `seat` works
+directly; it has no phone class, so the screen filter turns itself off with such a model.
+
 ## Measure speed
 
 ```bash
@@ -419,10 +500,11 @@ Seat update latency is set by the dwell times, not processing: about 0.7-1 s to 
 1.4-2 s to EMPTY (scenario test G). FP16 was measured at 9.6 ms vs 8.2 ms for FP32 YOLO on this
 GPU, so it was not adopted.
 
-`python -m pytest tests -q` runs 40 tests, including synthetic scenarios A-L in
+`python -m pytest tests -q` runs 51 tests, including synthetic scenarios A-L in
 `tests/test_occupancy.py` (empty bus, faceless and partial passengers, blocked seats, enter/leave
 timing, 80- and 90-seat maps, partial coverage, two-camera merging, camera reconnect, count
-flicker, head pose, face voting, coordinate mapping). They use generated geometry and fake
+flicker, head pose, face voting, coordinate mapping), plus the fleet file and the training
+pipeline's split, label and leakage checks. They use generated geometry and fake
 cameras, so they test logic, not detector accuracy. `python tests/smoke_pipeline.py` runs real
 YOLO on a generated video through the real bridge.
 

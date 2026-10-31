@@ -6,6 +6,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from fleet import DEFAULT_FLEET, capacity_for, load_fleet
 from core import Detector, SeatAppearance, grid_seats, load_seatmap, seat_states, validate_seatmap, EMPTY
 
 
@@ -62,7 +63,9 @@ def main():
     p.add_argument("--output")
     p.add_argument("--edit", help="Existing map to adjust")
     p.add_argument("--no-auto", action="store_true", help="Skip chair/couch proposals")
-    p.add_argument("--capacity", type=int, help="Configured seats in the whole bus (all cameras)")
+    p.add_argument("--capacity", type=int,
+                   help="Configured seats in the whole bus (all cameras); default: the fleet file's seats for --bus")
+    p.add_argument("--fleet", default=str(DEFAULT_FLEET), help="Fleet file from fleet.py; 'none' to ignore")
     p.add_argument("--camera-id", default=None, help="Name for this camera view, e.g. front or rear")
     p.add_argument("--first-id", type=int, default=None,
                    help="Seat ID of this map's first seat, so IDs stay unique across cameras")
@@ -97,7 +100,10 @@ def main():
                   "missed or merged, so check every box and use G (grid) for seat blocks.")
         except Exception as exc:
             print(f"Auto proposals unavailable ({type(exc).__name__}); use manual polygons.")
-    capacity = args.capacity or existing.get("capacity")
+    fleet = None if args.fleet.lower() == "none" else load_fleet(args.fleet)
+    capacity = args.capacity or existing.get("capacity") or capacity_for(fleet, args.bus)
+    if capacity:
+        print(f"Bus {args.bus}: capacity {capacity} seats")
     camera_id = args.camera_id or existing.get("camera_id")
     first_id = args.first_id or (existing["seats"][0]["seat_id"] if existing else 1)
     blocks = len({label.split("R")[0] for label in labels if label})

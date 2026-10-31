@@ -1,5 +1,6 @@
 """Reproducible synthetic-video integration check, NOT a model accuracy benchmark."""
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -36,8 +37,10 @@ def main():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     url = f"http://127.0.0.1:{port}"
+    # A fixed 40-seat bus, independent of fleet.json.
     service = subprocess.Popen([sys.executable, "-m", "uvicorn", "service:app", "--port", str(port)], cwd=ROOT,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               env={**os.environ, "VISION_CAPACITY": "40"})
     try:
         for _ in range(50):
             try:
@@ -49,7 +52,7 @@ def main():
         else:
             raise RuntimeError("Bridge did not start")
         subprocess.run([sys.executable, "count.py", "--source", str(video), "--seatmap", str(seatmap),
-                        "--fusion-url", url, "--duration", "14", "--interval", "1"], cwd=ROOT, check=True, timeout=45)
+                        "--fusion-url", url, "--duration", "14", "--interval", "1", "--capacity", "40"], cwd=ROOT, check=True, timeout=45)
         partial = requests.get(url + "/fusion", timeout=2).json()
         assert partial["visual_seats_total"] == 2 and partial["visual_empty_seats"] == 2, partial
         assert partial["seats_free"] is None, partial

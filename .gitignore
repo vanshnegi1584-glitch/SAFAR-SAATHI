@@ -11,3 +11,10 @@ vision/*.jpg
 vision/*.png
 vision/*.log
 vision/telemetry*.json
+
+# Transport schedule: contains driver names and phone numbers. Never commit.
+SafarSaathi_Bus_Schedule.csv
+*[Ss]chedule*.csv
+# Training data (bus images may show passengers)
+vision/datasets/
+vision/runs/

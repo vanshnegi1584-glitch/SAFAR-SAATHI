@@ -1,0 +1,587 @@
+{
+  "source": "SafarSaathi_Bus_Schedule.csv",
+  "buses": {
+    "18": {
+      "registration": "UK07PA1696",
+      "route": "Clock Tower- Darshanlal Chowk- Saharanpur Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 41
+    },
+    "10": {
+      "registration": "UK07PA1690",
+      "route": "Clock Tower- Darshanlal Chowk- Saharanpur Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 45
+    },
+    "9": {
+      "registration": "UK07PA1699",
+      "route": "Clock Tower- Darshanlal Chowk- Saharanpur Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "19": {
+      "registration": "UK07PA1698",
+      "route": "Clock Tower- Darshanlal Chowk- Saharanpur Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 56
+    },
+    "42": {
+      "registration": "UK07PA3542",
+      "route": "Asley Hall- Clock Tower- Darshanlal Chowk- Saharanpur Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 40
+    },
+    "108": {
+      "registration": "UK04PA0624",
+      "route": "Saharanpur Chowk-Matawala Bagh- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 52
+    },
+    "31": {
+      "registration": "UK07PA1101",
+      "route": "Saharanpur Chowk-Matawala Bagh- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 48
+    },
+    "13": {
+      "registration": "UK07PA0858",
+      "route": "Saharanpur Chowk-Matawala Bagh- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 46
+    },
+    "2": {
+      "registration": "UA07S2788",
+      "route": "Saharanpur Chowk-Matawala Bagh- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 47
+    },
+    "7": {
+      "registration": "UK07PA2333",
+      "route": "Daudwala-Mathurawala-Vishnupuram-Bangali Kothi- Kargi Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 54
+    },
+    "72": {
+      "registration": "UK07PA5007",
+      "route": "Daudwala-Mathurawala-Vishnupuram-Bangali Kothi- Kargi Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 53
+    },
+    "105": {
+      "registration": "UK07PA5891",
+      "route": "Bangali Kothi- Kargi Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 55
+    },
+    "75": {
+      "registration": "UK07PA5017",
+      "route": "Bangali Kothi- Kargi Chowk-ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 56
+    },
+    "97": {
+      "registration": "UK07PA5871",
+      "route": "Nepali Farm-Laal Tappad-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 40
+    },
+    "40": {
+      "registration": "UK07PA3345",
+      "route": "Nepali Farm-Laal Tappad-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 57
+    },
+    "6": {
+      "registration": "UK07PA2191",
+      "route": "Ranipokhri-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 53
+    },
+    "14": {
+      "registration": "UK07PA1811",
+      "route": "Ranipokhri-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 42
+    },
+    "65": {
+      "registration": "UK07PA4992",
+      "route": "Ranipokhri-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 53
+    },
+    "57": {
+      "registration": "UK07PA4738",
+      "route": "Ranipokhri-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 46
+    },
+    "5": {
+      "registration": "UK07PA2341",
+      "route": "Ranipokhri-Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 43
+    },
+    "34": {
+      "registration": "UK07PA2623",
+      "route": "Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 48
+    },
+    "106": {
+      "registration": "UK07PA5899",
+      "route": "Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 40
+    },
+    "39": {
+      "registration": "UK07PA3346",
+      "route": "Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 51
+    },
+    "49": {
+      "registration": "UK07PA4117",
+      "route": "Doiwala- Lachiwala- Kuanwala- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 44
+    },
+    "38": {
+      "registration": "UK07PA3344",
+      "route": "Gujraunwala- Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 45
+    },
+    "88": {
+      "registration": "UK07PA5516",
+      "route": "Gujraunwala- Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 41
+    },
+    "95": {
+      "registration": "UK07PA5551",
+      "route": "Gujraunwala- Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 48
+    },
+    "61": {
+      "registration": "UK07PA4742",
+      "route": "Gujraunwala- Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 50
+    },
+    "78": {
+      "registration": "UK07PA5020",
+      "route": "Gujraunwala- Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 52
+    },
+    "66": {
+      "registration": "UK07PA4995",
+      "route": "Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 54
+    },
+    "55": {
+      "registration": "UK07PA4171",
+      "route": "Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 54
+    },
+    "76": {
+      "registration": "UK07PA5018",
+      "route": "Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 41
+    },
+    "4": {
+      "registration": "UK07PA2192",
+      "route": "Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 60
+    },
+    "41": {
+      "registration": "UK07PA3545",
+      "route": "Raipur Chowk- Dobhal Chowk- 6 No. Pulia-Ring Road-Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 58
+    },
+    "77": {
+      "registration": "UK07PA5019",
+      "route": "Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 60
+    },
+    "8": {
+      "registration": "UK07PA1266",
+      "route": "Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 49
+    },
+    "23": {
+      "registration": "UK07PA0630",
+      "route": "Post Office Nehru Gram- Jogiwala- Rispana- ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 56
+    },
+    "69": {
+      "registration": "UK07PA4998",
+      "route": "Garhi Cant-Vijay Coloney- Chir Bagh- CM House- Garhi Cant- ONGC Chowk- Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "84": {
+      "registration": "UK07PA5033",
+      "route": "Garhi Cant-Vijay Coloney- Chir Bagh- CM House- Garhi Cant- ONGC Chowk- Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 49
+    },
+    "20": {
+      "registration": "UK07PA2190",
+      "route": "Hathibadkala-Garhi Cant-Vijay Coloney- Chir Bagh- CM House- Garhi Cant- ONGC Chowk- Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 59
+    },
+    "21": {
+      "registration": "UK07PA1910",
+      "route": "Hathibadkala-Garhi Cant-Vijay Coloney- Chir Bagh- CM House- Garhi Cant- ONGC Chowk- Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "81": {
+      "registration": "UK07PA5030",
+      "route": "Rajender Nagar- Yamuna Coloney-Bindal Pul- Kishan Nagar- Blood Bank-Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 59
+    },
+    "93": {
+      "registration": "UK07PA5548",
+      "route": "Rajender Nagar- Yamuna Coloney-Bindal Pul- Kishan Nagar- Blood Bank-Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 55
+    },
+    "60": {
+      "registration": "UK07PA4741",
+      "route": "Rajender Nagar- Yamuna Coloney-Bindal Pul- Kishan Nagar- Blood Bank-Ballupur Chowk- GMS Road- Geu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 58
+    },
+    "22": {
+      "registration": "UA07Q4731",
+      "route": "ONGC Chowk- Ballupur Chowk- GMS Road- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 57
+    },
+    "54": {
+      "registration": "UK07PA4161",
+      "route": "Khirsali Chowk-IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 54
+    },
+    "102": {
+      "registration": "UK07PA5877",
+      "route": "Khirsali Chowk-IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 60
+    },
+    "82": {
+      "registration": "UK07PA5031",
+      "route": "IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "68": {
+      "registration": "UK07PA4997",
+      "route": "IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 48
+    },
+    "70": {
+      "registration": "UK07PA4999",
+      "route": "IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 54
+    },
+    "98": {
+      "registration": "UK07PA5872",
+      "route": "IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 43
+    },
+    "59": {
+      "registration": "UK07PA4740",
+      "route": "IT Park- Nala Paani Chowk-Shastdhara Crossing- Ladpur- 6 No. Pulia- Fountain Chowk Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 53
+    },
+    "87": {
+      "registration": "UK07PA5515",
+      "route": "Fountain Chowk- Nehru Colony- Rispana- Kargi- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 40
+    },
+    "15": {
+      "registration": "UK07PA1944",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 53
+    },
+    "62": {
+      "registration": "UK07PA4778",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 49
+    },
+    "45": {
+      "registration": "UK07PA3815",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 48
+    },
+    "58": {
+      "registration": "UK07PA4739",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "52": {
+      "registration": "UK07PA4121",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "86": {
+      "registration": "UK07PA5514",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "74": {
+      "registration": "UK07PA5016",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 40
+    },
+    "100": {
+      "registration": "UK07PA5874",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 47
+    },
+    "104": {
+      "registration": "UK07PA5890",
+      "route": "Nakrounda More- Harawala-Miawala-Mokampur- Jogiwala- Rispana- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 60
+    },
+    "53": {
+      "registration": "UK07PA4160",
+      "route": "Mokampur- Jogiwala-Rispana- Kargi Chowk- ISBT-Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 42
+    },
+    "56": {
+      "registration": "UK07PA4172",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "48": {
+      "registration": "UK07PA3849",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 43
+    },
+    "89": {
+      "registration": "UK07PA5517",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 49
+    },
+    "64": {
+      "registration": "UK07PA4816",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 53
+    },
+    "80": {
+      "registration": "UK07PA5029",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 41
+    },
+    "103": {
+      "registration": "UK07PA5878",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 41
+    },
+    "16": {
+      "registration": "UA07L5333",
+      "route": "Rispana-Kargi Chowk-ISBT-Geu/Gehu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 50
+    },
+    "44": {
+      "registration": "UK07PA3814",
+      "route": "Naya Gaon Palio- Badowala- Telpur-Mehuwala- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 52
+    },
+    "35": {
+      "registration": "UK07PA2622",
+      "route": "Naya Gaon Palio- Badowala- Telpur-Mehuwala- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 41
+    },
+    "46": {
+      "registration": "UK07PA3816",
+      "route": "Naya Gaon Palio- Badowala- Telpur-Mehuwala- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 45
+    },
+    "51": {
+      "registration": "UK07PA4119",
+      "route": "Naya Gaon Palio- Badowala- Telpur-Mehuwala- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 44
+    },
+    "83": {
+      "registration": "UK07PA5032",
+      "route": "Naya Gaon Palio- Badowala- Telpur-Mehuwala- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 42
+    },
+    "107": {
+      "registration": "UK07PA5918",
+      "route": "Naya Gaon Palio- Badowala- Telpur-Mehuwala- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 58
+    },
+    "63": {
+      "registration": "UK07PA4815",
+      "route": "Race Course- Dharampur- Mata Mandir- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 48
+    },
+    "24": {
+      "registration": "UK07PA1691",
+      "route": "Race Course- Dharampur- Mata Mandir- Kargi Chowk- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 53
+    },
+    "43": {
+      "registration": "UK07PA3546",
+      "route": "Dharampur-Balbir Road- Fountain Chowk- Rispana- ISBT- Geu",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 46
+    },
+    "94": {
+      "registration": "UK07PA5549",
+      "route": "Rajpur-Great Value- Dilaram Bazar- Nanni Bakery- Survey Chowk- Dwarka Store- Araghar- Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 44
+    },
+    "96": {
+      "registration": "UK07PA5553",
+      "route": "Rajpur-Great Value- Dilaram Bazar- Nanni Bakery- Survey Chowk- Dwarka Store- Araghar- Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 48
+    },
+    "99": {
+      "registration": "UK07PA5873",
+      "route": "Rajpur-Great Value- Dilaram Bazar- Nanni Bakery- Survey Chowk- Dwarka Store- Araghar- Rispana- Kargi Chowk- ISBT- Geu",
+      "shift": "6.45 AM 10.45AM",
+      "seats": 40
+    },
+    "3": {
+      "registration": "UK07PA2334",
+      "route": "Kulhal-ISBT-Geu/Gehu",
+      "shift": "6.10 AM No Service",
+      "seats": 54
+    },
+    "37": {
+      "registration": "UK07PA3348",
+      "route": "Kulhal-ISBT-Geu/Gehu",
+      "shift": "6.10 AM No Service",
+      "seats": 59
+    },
+    "36": {
+      "registration": "UK07PA2621",
+      "route": "VikasNagar-Tehsil- Harbatpur Chowk- Langa Road- Shaspur- Selaqui-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari- Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 46
+    },
+    "47": {
+      "registration": "UK07PA3848",
+      "route": "VikasNagar-Tehsil- Harbatpur Chowk- Langa Road- Shaspur- Selaqui-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari- Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 48
+    },
+    "50": {
+      "registration": "UK07PA4118",
+      "route": "Selaqui Chowk-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari- Vasant Vihar- Baliwala Chowk-GMS Road- Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 47
+    },
+    "71": {
+      "registration": "UK07PA5006",
+      "route": "Selaqui Chowk-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari- Vasant Vihar- Baliwala Chowk-GMS Road- Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 56
+    },
+    "73": {
+      "registration": "UK07PA5015",
+      "route": "Selaqui Chowk-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari- Vasant Vihar- Baliwala Chowk-GMS Road- Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 43
+    },
+    "33": {
+      "registration": "UK07PA2584",
+      "route": "Selaqui Chowk-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari- Vasant Vihar- Baliwala Chowk-GMS Road- Geu",
+      "shift": "6.35 AM 10.35 AM",
+      "seats": 51
+    },
+    "79": {
+      "registration": "UK07PA5028",
+      "route": "Rajawala-Bahuwala-Manduwala-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari-GMS Road- Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 43
+    },
+    "101": {
+      "registration": "UK07PA5875",
+      "route": "Rajawala-Bahuwala-Manduwala-Sudhowala-Nanda Ki Chowki- Premnagar- Panditwari-GMS Road- Geu",
+      "shift": "6.10 AM No Service",
+      "seats": 44
+    },
+    "91": {
+      "registration": "UK07PA5542",
+      "route": "Prem Nagar- Panditwari- Balliwalachowk- GMS Road- GEU",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 52
+    },
+    "92": {
+      "registration": "UK07PA5547",
+      "route": "Prem Nagar- Panditwari- Balliwalachowk- GMS Road- GEU",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 42
+    },
+    "90": {
+      "registration": "UK07PA5541",
+      "route": "Prem Nagar- Panditwari- Balliwalachowk- GMS Road- GEU",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 54
+    },
+    "85": {
+      "registration": "UK07PA5512",
+      "route": "Prem Nagar- Panditwari- Balliwalachowk- GMS Road- GEU",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 51
+    },
+    "67": {
+      "registration": "UK07PA4996",
+      "route": "Prem Nagar- Panditwari- Balliwalachowk- GMS Road- GEU",
+      "shift": "7.00 AM 11.00 AM",
+      "seats": 52
+    }
+  }
+}

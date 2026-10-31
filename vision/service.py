@@ -7,11 +7,13 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from fleet import FALLBACK_CAPACITY, capacity_for, load_fleet
 from fusion import FusionConfig, fuse, merge_cameras
 
 app = FastAPI(title="SafarSaathi Vision Fusion", version="0.1.0")
-CAPACITY = int(os.environ.get("VISION_CAPACITY", "40"))
 BUS_ID = os.environ.get("VISION_BUS_ID", "14")
+# VISION_CAPACITY wins; otherwise this bus's seats from fleet.json (built from the schedule).
+CAPACITY = int(os.environ.get("VISION_CAPACITY") or capacity_for(load_fleet(), BUS_ID) or FALLBACK_CAPACITY)
 config = FusionConfig(capacity=CAPACITY)
 lock = threading.Lock()
 state = {"telemetry": None, "visual": {}}  # visual: camera_id -> latest observation

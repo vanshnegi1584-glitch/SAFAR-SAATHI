@@ -17,10 +17,11 @@ os.environ.setdefault("YOLO_AUTOINSTALL", "false")
 os.environ.setdefault("YOLO_VERBOSE", "false")
 
 OCCUPIED, EMPTY, UNKNOWN = "occupied", "empty", "unknown"
+# Classes are looked up by name, so a custom-trained model (e.g. person + seat) works too.
 # COCO tv, laptop, cell phone: a person drawn inside one is a picture, not a passenger.
-SCREEN_CLASSES = (62, 63, 67)
-# COCO chair, couch: the only seat-like classes yolov8n knows. There is no bus-seat class.
-SEAT_CLASSES = (56, 57)
+SCREEN_NAMES = ("tv", "laptop", "cell phone")
+# COCO chair, couch are the only seat-like classes yolov8n knows; a trained model can add "seat".
+SEAT_NAMES = ("seat", "chair", "couch")
 
 
 def drop_screen_people(people, screens, overlap=0.7):
@@ -318,6 +319,13 @@ class Detector:
         from ultralytics import YOLO, settings
         settings.update({"sync": False})
         self.model = YOLO(str(weights or ROOT / "yolov8n.pt"))
+        ids = {str(name).lower(): int(i) for i, name in self.model.names.items()}
+        if "person" not in ids:
+            raise ValueError(f"Model has no 'person' class (it has: {', '.join(ids)})")
+        self.person_class = ids["person"]
+        self.screen_classes = tuple(ids[n] for n in SCREEN_NAMES if n in ids)
+        self.seat_classes = tuple(ids[n] for n in SEAT_NAMES if n in ids)
+        screen_filter = screen_filter and bool(self.screen_classes)  # a person-only model cannot see screens
         self.conf, self.imgsz, self.device = conf, imgsz, device
         self.screen_filter, self.screen_conf, self.weak_conf = screen_filter, screen_conf, weak_conf
         self.liveness, self.live_threshold, self.liveness_interval = liveness, live_threshold, liveness_interval
@@ -343,25 +351,26 @@ class Detector:
         # One device-to-host transfer: x1, y1, x2, y2, confidence, class.
         return result.boxes.data.cpu().numpy()
 
-    def proposals(self, frame, classes=SEAT_CLASSES):
+    def proposals(self, frame):
         """Seat-like object boxes for calibration, de-duplicated across classes."""
-        rows = self._predict(frame, classes, self.weak_conf)
+        if not self.seat_classes:
+            return []
+        rows = self._predict(frame, self.seat_classes, self.weak_conf)
         boxes, scores = rows[:, :4].tolist(), rows[:, 4].tolist()
         keep = cv2.dnn.NMSBoxes([[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in boxes], scores, self.weak_conf, 0.5)
         return [boxes[i] for i in np.asarray(keep, int).reshape(-1)]
 
-    def boxes(self, frame, cls=0):
-        if cls != 0:
-            return [r[:4].tolist() for r in self._predict(frame, [cls], self.conf)]
+    def boxes(self, frame):
         screens = self.screen_filter
         floor = min(self.conf, self.weak_conf, self.screen_conf if screens else 1)
         # One pass for people and screens; lower thresholds keep weak evidence and phones.
-        rows = self._predict(frame, [0, *SCREEN_CLASSES] if screens else [0], floor)
-        people = [r for r in rows if int(r[5]) == 0]
+        person = self.person_class
+        rows = self._predict(frame, [person, *self.screen_classes] if screens else [person], floor)
+        people = [r for r in rows if int(r[5]) == person]
         found = [r[:4].tolist() for r in people if r[4] >= self.conf]
         weak = [r[:4].tolist() for r in people if self.weak_conf <= r[4] < self.conf]
         if screens:
-            self.screens = [r[:4].tolist() for r in rows if int(r[5]) in SCREEN_CLASSES and r[4] >= self.screen_conf]
+            self.screens = [r[:4].tolist() for r in rows if int(r[5]) in self.screen_classes and r[4] >= self.screen_conf]
             kept = drop_screen_people(found, self.screens)
             self.rejected = len(found) - len(kept)
             found, weak = kept, drop_screen_people(weak, self.screens)

@@ -10,6 +10,7 @@ from urllib.parse import quote
 import cv2
 import requests
 
+from fleet import DEFAULT_FLEET, capacity_for, load_fleet, resolve_capacity
 from core import (CountStabilizer, Detector, FaceLiveness, SeatAppearance, SeatTracker, draw, load_seatmap,
                   scaled_seats, seat_states, summarize)
 
@@ -156,7 +157,9 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--bus", default="14")
     p.add_argument("--source", default="0")
-    p.add_argument("--capacity", type=int, help="Configured bus seats; default: seat map 'capacity', else 40")
+    p.add_argument("--capacity", type=int,
+                   help="Configured bus seats; default: seat map 'capacity', else the fleet file's seats for --bus, else 40")
+    p.add_argument("--fleet", default=str(DEFAULT_FLEET), help="Fleet file from fleet.py (seats per bus); 'none' to ignore")
     p.add_argument("--seatmap")
     p.add_argument("--camera-id", help="Default: seat map 'camera_id', else 'main'")
     p.add_argument("--rule", choices=["hip", "iou"], default="hip")
@@ -228,7 +231,9 @@ def main():
         tracker = SeatTracker(args.occupy_seconds, args.vacate_seconds, args.unknown_seconds,
                               args.agree, args.outage_seconds)
         seatmap = load_seatmap(args.seatmap) if args.seatmap else None
-        capacity = args.capacity or (seatmap or {}).get("capacity") or 40
+        fleet = None if args.fleet.lower() == "none" else load_fleet(args.fleet)
+        capacity, capacity_source = resolve_capacity(args.capacity, (seatmap or {}).get("capacity"),
+                                                     capacity_for(fleet, args.bus), args.bus)
         if capacity < 1:
             raise ValueError("capacity must be positive")
         if seatmap and len(seatmap["seats"]) > capacity:
@@ -243,6 +248,7 @@ def main():
     references = {} if not seatmap or args.no_reference else {
         s["seat_id"]: s["empty_reference"] for s in seatmap["seats"] if "empty_reference" in s}
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    log.info("Bus %s capacity %d (from %s)", args.bus, capacity, capacity_source)
     if seatmap:
         log.info("Capacity %d | %d seats mapped by camera '%s' | %d never visible to it | %d with empty reference",
                  capacity, len(seatmap["seats"]), camera_id, capacity - len(seatmap["seats"]), len(references))

@@ -47,7 +47,8 @@ The first counts people from the webcam with a preview window (Q to stop); the s
 on a frame of empty seats so `count.py --seatmap seatmap_bus14.json` can report OCCUPIED, EMPTY and
 UNKNOWN seats. See [vision/README.md](vision/README.md) for installation, calibrating 80-90-seat
 buses, camera and distance settings, face liveness and its limits, fusion integration,
-evaluation, and measured validation status.
+evaluation, the fleet file built from the transport schedule (seats per bus, no driver
+details), training on your own bus photos, and measured validation status.
 
 ## Integration contracts
 
