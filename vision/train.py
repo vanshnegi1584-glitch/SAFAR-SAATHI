@@ -589,6 +589,73 @@ def evaluate(args):
         print("This is the held-out test split: report it once, after choosing settings on 'val'.")
 
 
+def seat_confusion(model, names, image_dir, label_dir, conf=0.35, iou=0.5, imgsz=960, device="cpu"):
+    """Per source: what each labelled seat was called, and where every 'empty' box landed.
+
+    The costly error is an 'empty' box on an occupied seat (a student sent to a taken seat).
+    Duplicate boxes count too: per-class NMS can put both an occupied and an empty box on one seat.
+    """
+    occ, emp = names.index("occupied_seat"), names.index("empty_seat")
+    ids = {str(n).lower(): int(i) for i, n in model.names.items()}
+    to_data = {ids["occupied_seat"]: occ, ids["empty_seat"]: emp}
+    table = {}
+    for image in sorted(p for p in image_dir.glob("*") if p.suffix.lower() in IMAGE_TYPES):
+        t = table.setdefault(image.name.split(TRIP_SEPARATOR)[0] if TRIP_SEPARATOR in image.name else "all",
+                             {"occupied_seats": 0, "occupied_called_empty": 0, "occupied_missed": 0,
+                              "empty_seats": 0, "empty_called_occupied": 0, "empty_missed": 0,
+                              "empty_boxes": 0, "empty_boxes_on_occupied_seat": 0, "empty_boxes_on_no_labelled_seat": 0})
+        frame = cv2.imread(str(image))
+        h, w = frame.shape[:2]
+        truths = [(c, [(cx - bw / 2) * w, (cy - bh / 2) * h, (cx + bw / 2) * w, (cy + bh / 2) * h])
+                  for c, cx, cy, bw, bh in parse_label(label_dir / f"{image.stem}.txt", len(names))]
+        rows = model.predict(frame, conf=conf, imgsz=imgsz, device=device, verbose=False)[0].boxes.data.cpu().numpy()
+        preds = sorted(((to_data[int(r[5])], r[:4].tolist(), float(r[4])) for r in rows if int(r[5]) in to_data),
+                       key=lambda p: -p[2])
+        used = set()
+        for cls, box in truths:
+            best = max(((j, _box_iou(box, p[1])) for j, p in enumerate(preds) if j not in used),
+                       key=lambda x: x[1], default=(None, 0))
+            got = None
+            if best[1] >= iou:
+                used.add(best[0])
+                got = preds[best[0]][0]
+            kind = "occupied" if cls == occ else "empty"
+            t[f"{kind}_seats"] += 1
+            if got is None:
+                t[f"{kind}_missed"] += 1
+            elif kind == "occupied" and got == emp:
+                t["occupied_called_empty"] += 1
+            elif kind == "empty" and got == occ:
+                t["empty_called_occupied"] += 1
+        for cls, box, _ in preds:
+            if cls != emp:
+                continue
+            t["empty_boxes"] += 1
+            best = max(((c, _box_iou(box, b)) for c, b in truths), key=lambda x: x[1], default=(None, 0))
+            if best[1] < iou:
+                t["empty_boxes_on_no_labelled_seat"] += 1
+            elif best[0] == occ:
+                t["empty_boxes_on_occupied_seat"] += 1
+    for t in table.values():
+        t["false_empty_percent_of_empty_boxes"] = (round(100 * t["empty_boxes_on_occupied_seat"] / t["empty_boxes"], 2)
+                                                   if t["empty_boxes"] else None)
+    return table
+
+
+def confusion(args):
+    from ultralytics import YOLO
+    _, names, dirs = read_data(args.data)
+    if not {"occupied_seat", "empty_seat"} <= set(names):
+        raise ValueError("confusion needs a dataset with occupied_seat and empty_seat classes")
+    device = args.device
+    if device == "auto":
+        import torch
+        device = "0" if torch.cuda.is_available() else "cpu"
+    table = seat_confusion(YOLO(str(args.weights)), names, dirs[args.split], labels_for(dirs[args.split]),
+                           args.conf, args.iou, args.imgsz, device)
+    print(json.dumps({"split": args.split, "conf": args.conf, "iou": args.iou, "by_source": table}, indent=2))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subs = p.add_subparsers(dest="command", required=True)
@@ -646,9 +713,17 @@ def main():
     v.add_argument("--iou", type=float, default=0.5)
     v.add_argument("--imgsz", type=int, default=960)
     v.add_argument("--device", default="auto")
+    f = subs.add_parser("confusion", help="Seat model: occupied seats called empty, per source dataset")
+    f.add_argument("--weights", required=True)
+    f.add_argument("--data", default=str(ROOT / "datasets" / "seats_grouped" / "data.yaml"))
+    f.add_argument("--split", choices=SPLITS, default="val")
+    f.add_argument("--conf", type=float, default=0.35)
+    f.add_argument("--iou", type=float, default=0.5)
+    f.add_argument("--imgsz", type=int, default=960)
+    f.add_argument("--device", default="auto")
     args = p.parse_args()
     try:
-        {"extract": extract, "split": split, "import": import_dataset, "resplit": resplit, "check": check, "train": train,
+        {"extract": extract, "split": split, "import": import_dataset, "resplit": resplit, "check": check, "train": train, "confusion": confusion,
          "evaluate": evaluate}[args.command](args)
     except (ValueError, OSError, KeyError) as exc:
         p.error(str(exc))

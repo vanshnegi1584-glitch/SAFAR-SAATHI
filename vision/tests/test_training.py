@@ -143,3 +143,25 @@ def test_resplit_groups_near_duplicates_and_augmented_copies():
     assert groups[4] != groups[0]  # same pixels but another source: kept apart (different buses)
     report = leakage_report(hashes, ["train", "test", "train", "val", "train"], sources)
     assert report["test/insidebus"]["near_duplicate_of_train_percent"] == 100.0
+
+
+def test_seat_confusion_counts_empty_boxes_on_occupied_seats(tmp_path):
+    from train import seat_confusion
+
+    class Boxes:
+        def __init__(self, rows):
+            self.data = type("T", (), {"cpu": lambda s: type("N", (), {"numpy": lambda s2: np.array(rows, np.float32)})()})()
+
+    class FakeModel:  # model class ids differ from dataset ids on purpose: mapped by name
+        names = {0: "empty_seat", 1: "occupied_seat"}
+        def predict(self, frame, **_):
+            # seat A (occupied): an occupied box AND a duplicate empty box; seat B (empty): correct; one stray empty box
+            return [type("R", (), {"boxes": Boxes([[0, 0, 10, 10, .9, 1], [0, 0, 10, 10, .6, 0],
+                                                   [20, 0, 30, 10, .8, 0], [50, 50, 60, 60, .7, 0]])})()]
+
+    (tmp_path / "images").mkdir(); (tmp_path / "labels").mkdir()
+    cv2.imwrite(str(tmp_path / "images" / "busA__f1.png"), np.zeros((100, 100, 3), np.uint8))
+    (tmp_path / "labels" / "busA__f1.txt").write_text("0 0.05 0.05 0.1 0.1\n1 0.25 0.05 0.1 0.1\n")  # 0 occupied, 1 empty
+    t = seat_confusion(FakeModel(), ["occupied_seat", "empty_seat"], tmp_path / "images", tmp_path / "labels")["busA"]
+    assert (t["occupied_seats"], t["occupied_called_empty"], t["empty_seats"], t["empty_missed"]) == (1, 0, 1, 0)
+    assert (t["empty_boxes"], t["empty_boxes_on_occupied_seat"], t["empty_boxes_on_no_labelled_seat"]) == (3, 1, 1)

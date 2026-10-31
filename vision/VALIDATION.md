@@ -40,6 +40,26 @@ Still not measured: any real bus result (people, per-seat, false-empty, unknown 
 automatic chair-proposal quality on bus seats, multi-camera with real cameras, physical
 unplug/replug, Raspberry Pi 5 performance.
 
+## Update: public seat datasets and first seat model (31 October 2026, evening)
+
+- Datasets (downloaded by the user from Roboflow Universe): Inside Bus View v5 (1,378 images,
+  Public Domain) and VISTA v1 (1,088 images from 452 originals, CC BY 4.0 with a research-only
+  note). kdglab bus-seat-detection was inspected and excluded (people in 191 of 366 images while
+  only empty seats are labelled; multi-seat boxes).
+- Leakage found and removed: 81% of Inside Bus View's own val/test images were within 20 of 256
+  hash bits of a training image. `train.py resplit` (hash groups + augmented copies of one photo)
+  gave 1,724 / 370 / 372 images with 0% near-duplicates across splits and no original in two splits.
+- Training: yolov8n, imgsz 960, batch 8, RTX 3050. Stopped at epoch 51 (exit 1, cause unknown),
+  resumed, then stopped at epoch 76 when the laptop entered Modern Standby (17:29). Best epoch 75.
+- Validation / test (confidence 0.35, IoU 0.5): see the results table in README "Start with public
+  bus-seat datasets". Test, run once: occupied P/R 0.900/0.905 (Inside Bus View) and 0.872/0.904
+  (VISTA); empty P/R 0.896/0.879 and 0.962/0.982; "empty" boxes on occupied seats 3 of 3,311 and
+  8 of 1,403; mAP@50 0.920.
+- An evaluation script without a `__main__` guard hung on Windows (data-loader worker processes
+  re-imported it); fixed, then the val evaluation took 48 s.
+- `python -m pytest tests -q`: **57 passed**.
+- Not measured: anything on GEHU buses; the seat model is not used by `count.py`.
+
 ## Update: flicker, face pose, distance (31 October 2026, late afternoon)
 
 - `python -m pytest tests -q`: **40 passed**; `python tests/smoke_pipeline.py`: SMOKE PASS

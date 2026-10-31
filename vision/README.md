@@ -524,6 +524,35 @@ land in different splits, so treat scores as an upper bound for a *new* bus.
 Polygon rows in an export (81 in Inside Bus View, from seats outlined instead of boxed) are
 converted to their bounding boxes on import. Images: Inside Bus View 2560x1440, VISTA 640x360.
 
+**Results of the first seat model** (yolov8n fine-tuned at imgsz 960 on Inside Bus View + VISTA
+after `resplit`; best checkpoint at epoch 75; the run was cut off at epoch 76, see below). Measured
+at confidence 0.35 and IoU 0.5 with `train.py evaluate`/`confusion`; the test split was run once,
+after validation, with no settings changed:
+
+| Split, source | Occupied P / R | Empty P / R | "Empty" boxes on an occupied seat | Seats with no box |
+| --- | --- | --- | --- | --- |
+| val, Inside Bus View (195 img) | 0.917 / 0.914 | 0.863 / 0.820 | 0 of 2,111 | 443 occ, 399 empty |
+| val, VISTA (175 img) | 0.896 / 0.907 | 0.959 / 0.970 | 9 of 1,467 (0.61%) | 143 occ, 42 empty |
+| **test, Inside Bus View (219 img)** | 0.900 / 0.905 | 0.896 / 0.879 | **3 of 3,311 (0.09%)** | 459 occ, 407 empty |
+| **test, VISTA (153 img)** | 0.872 / 0.904 | 0.962 / 0.982 | **8 of 1,403 (0.57%)** | 123 occ, 23 empty |
+
+Ultralytics mAP@50 / mAP@50-95: val 0.931 / 0.578, test 0.920 / 0.550. Reading it for this
+project: calling an occupied seat empty (the costly error) was rare; the common errors are missed
+seats (about 9% of occupied and 12-18% of empty seats on Inside Bus View get no box) and "empty"
+boxes on places with no labelled seat (255 val / 326 test on Inside Bus View, cause not inspected).
+These are scores on **these two buses' footage**, split by visual similarity; they are not a score
+for GEHU buses.
+
+```bash
+python train.py confusion --weights runs/seats/weights/best.pt --split test
+```
+
+**Long runs and laptop sleep.** Windows Modern Standby stopped one training run (last checkpoint
+17:27, standby 17:29) and an evaluation (started 19:03, standby 19:05). Keep the laptop plugged in
+and the lid open, set "When plugged in, put my device to sleep after" to *Never* while training,
+and resume an interrupted run with `python train.py train --resume runs/seats/weights/last.pt`.
+An earlier stop at epoch 51 (exit code 1, no message, no standby event) remains unexplained.
+
 `import` unzips each archive into its own folder (refusing paths that would escape it), maps class
 **names** (every source class must be mapped, or explicitly `=drop`), prefixes files with `--name`,
 and merges into `datasets/seats/`. Use the zip file names you actually saved.
