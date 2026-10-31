@@ -481,9 +481,17 @@ def check(args):
 # ---------- train ----------
 
 def train(args):
+    from ultralytics import YOLO
+    if args.resume:
+        # Continue an interrupted run from its last checkpoint with the same settings.
+        checkpoint = Path(args.resume)
+        if not checkpoint.is_file():
+            raise ValueError(f"No checkpoint at {checkpoint}")
+        run = YOLO(str(checkpoint)).train(resume=True)
+        print(f"Best weights: {Path(run.save_dir) / 'weights' / 'best.pt'}")
+        return
     report = check_dataset(args.data)
     print(json.dumps(report, indent=2))
-    from ultralytics import YOLO
     device = args.device
     if device == "auto":
         import torch
@@ -492,7 +500,7 @@ def train(args):
     run = model.train(data=str(Path(args.data).resolve()), epochs=args.epochs, imgsz=args.imgsz, batch=args.batch,
                       device=device, patience=args.patience, project=str(ROOT / "runs"), name=args.name,
                       exist_ok=False, seed=0, deterministic=True, plots=not args.no_plots, amp=not args.no_amp,
-                      workers=args.workers, verbose=False)
+                      workers=args.workers, verbose=True)
     best = Path(run.save_dir) / "weights" / "best.pt"
     print(f"Best weights: {best}")
     print(f"Evaluate on the held-out test split:\n  python train.py evaluate --weights {best} --data {args.data} "
@@ -628,6 +636,7 @@ def main():
     t.add_argument("--name", default="bus")
     t.add_argument("--no-plots", action="store_true")
     t.add_argument("--no-amp", action="store_true")
+    t.add_argument("--resume", help="Continue an interrupted run, e.g. runs/seats/weights/last.pt")
     v = subs.add_parser("evaluate", help="Precision/recall per class and people-count error, vs a baseline")
     v.add_argument("--weights", required=True)
     v.add_argument("--data", default=str(ROOT / "datasets" / "bus" / "data.yaml"))
