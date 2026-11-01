@@ -25,3 +25,5 @@ weights/
 # Teammate repositories cloned inside this one (they have their own git history)
 GPS/
 Bus management system/
+Siddhant/
+demo/.running.json
