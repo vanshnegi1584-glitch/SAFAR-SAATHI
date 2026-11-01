@@ -4,10 +4,10 @@ import { api, logout } from '../api'
 import { useLiveBuses, useRoutes } from '../live'
 import { MapLegend, TripLine } from '../components/LivePanels'
 import CameraAgentCard from '../components/CameraAgentCard'
-import { useLiveTrips } from '../liveHooks'
-import { clock, freshness, isFull, minutesOf, nextBusAfterFull } from '../liveMath'
+import { useLiveTrips, useRoutePaths } from '../liveHooks'
+import { clock, demoDrive, freshness, isFull, minutesOf, nextBusAfterFull } from '../liveMath'
 import BusMap from '../components/BusMap'
-import { DEMO_PATH } from '../geo'
+import { routeLine } from '../routing'
 import { BottomNav, Eta, SeatMeter, StatusPill, TopBar } from '../components/ui'
 import { notify } from '../prefs'
 import Announcements from '../components/Announcements'
@@ -19,6 +19,8 @@ import { watchDriverPosition } from '../nativeGps'
 const GPS_SEND_MS = 5000
 const GPS_HEARTBEAT_MS = 15000
 const SIM_STEP_MS = 3000
+const SIM_KMH = 40          // demo speed along the road (about 33 m per step)
+const SIM_DWELL_MS = 9000   // demo wait at each stop
 const SOS_HOLD_MS = 2000
 // The Android app keeps sharing with the screen off (see nativeGps.js); a website can't.
 const NATIVE = Capacitor.isNativePlatform()
@@ -147,7 +149,7 @@ export default function Staff() {
 
         <CameraAgentCard busId={bus.id} />
 
-        {isDriver && <GpsShare key={bus.id} busId={bus.id} onError={fail} />}
+        {isDriver && <GpsShare key={bus.id} busId={bus.id} route={routes.find((r) => r.id === bus.route_id)} onError={fail} />}
 
         <TripState bus={bus} />
 
@@ -448,7 +450,7 @@ function useWakeLock(active) {
   }, [active])
 }
 
-function GpsShare({ busId, onError }) {
+function GpsShare({ busId, route, onError }) {
   // Once a driver turns sharing on, it resumes by itself every time the app opens.
   const [mode, setMode] = useState(() => (localStorage.getItem(GPS_KEY(busId)) === 'gps' ? 'gps' : 'off'))
   const [last, setLast] = useState(null)
@@ -458,6 +460,10 @@ function GpsShare({ busId, onError }) {
   const lastSent = useRef(0)
   const lastFix = useRef(null)
   const gpsAvailable = window.isSecureContext && 'geolocation' in navigator
+  // The demo drives this bus's own route along the line the map draws for it (see routeLine).
+  // The route as text, so the demo restarts only when the route itself changes, not on every refresh of the list.
+  const routeKey = route ? JSON.stringify({ id: route.id, stops: route.stop_points.map((p) => [p.lat, p.lng]) }) : ''
+  const approved = useRoutePaths()[route?.id]
   useWakeLock(mode !== 'off')
 
   const choose = (m) => {
@@ -516,13 +522,27 @@ function GpsShare({ busId, onError }) {
       return () => { stopWatch(); clearInterval(beat) }
     }
     if (mode === 'demo') {
-      let i = 0
-      const step = () => { send({ lat: DEMO_PATH[i][0], lng: DEMO_PATH[i][1] }); i = (i + 1) % DEMO_PATH.length }
-      step()
-      const id = setInterval(step, SIM_STEP_MS)
-      return () => clearInterval(id)
+      if (!routeKey) return
+      const { stops } = JSON.parse(routeKey)
+      if (!stops.length) return
+      let id, gone = false
+      // routeLine wants the route's stop_points (far end first), as the map has them.
+      routeLine({ stop_points: stops.map(([lat, lng]) => ({ lat, lng })) }, approved).then((line) => {
+        if (gone) return
+        const stepM = (SIM_KMH / 3.6) * (SIM_STEP_MS / 1000)
+        const drive = demoDrive(line, stops, stepM, Math.round(SIM_DWELL_MS / SIM_STEP_MS))
+        let i = 0
+        const step = () => {
+          const [at, prev] = [drive[i], drive[(i || drive.length) - 1]]
+          send({ lat: at[0], lng: at[1], speed_kmh: at === prev ? 0 : SIM_KMH })
+          i = (i + 1) % drive.length
+        }
+        step()
+        id = setInterval(step, SIM_STEP_MS)
+      })
+      return () => { gone = true; clearInterval(id) }
     }
-  }, [mode, send, gpsAvailable, busId])
+  }, [mode, send, gpsAvailable, busId, routeKey, approved])
 
   return (
     <section className={`card gps-card ${mode !== 'off' ? 'on' : ''}`}>

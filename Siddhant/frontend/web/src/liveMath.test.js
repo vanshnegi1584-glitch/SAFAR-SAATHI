@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { CAMPUS } from './geo.js'
 import {
-  alternatives, bearingDeg, clock, directionOf, distanceM, freshness, isFull, nearestPlace, nextBusAfterFull, progress, project,
+  alternatives, bearingDeg, clock, demoDrive, directionOf, distanceM, freshness, isFull, nearestPlace, nextBusAfterFull, progress, project,
   pointAlong, roadTrack, routePath, snapToRoad,
 } from './liveMath.js'
 
@@ -173,4 +173,21 @@ test('points along the road, and the right pass where the road comes back on its
   const spot = [30.28, lng + 0.00155]
   assert.ok(Math.abs(snapToRoad(back, spot, 140).along - 150) < 5)
   assert.ok(Math.abs(snapToRoad(back, spot, 460).along - 450) < 5)
+})
+
+test('the demo drive stays on the road, waits at stops, and loops back without a jump', () => {
+  const line = [...ROAD].reverse()                                             // campus -> A, as the map draws it
+  const stops = LROUTE.stop_points.map((p) => [p.lat, p.lng])
+  const drive = demoDrive(line, stops, 50, 2)
+  const track = roadTrack(line)
+  assert.deepEqual(drive[0], line[0])
+  for (const p of drive) assert.ok(snapToRoad(track, p).off < 1)                // never off the blue line
+  const loop = [...drive, drive[0]]
+  for (let i = 1; i < loop.length; i++) assert.ok(distanceM(loop[i - 1], loop[i]) <= 50.5) // small steps, no jump back
+  // Out to A (the far end) and back, holding at the corner stop each way and at A.
+  const held = (p) => drive.filter((q, i) => i && distanceM(q, p) < 1 && distanceM(drive[i - 1], q) < 1).length
+  assert.equal(held(stops[1]), 4)
+  assert.equal(held(stops[0]), 2)
+  assert.ok(drive.some((p) => distanceM(p, stops[0]) < 1))
+  assert.deepEqual(demoDrive([[30.28, lng]], stops, 50, 2), [])
 })

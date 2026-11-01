@@ -6,7 +6,7 @@ import { CAMPUS } from '../geo'
 import { GPS_SOURCE, onDriverAppGps } from '../gpsSource'
 import { useRoutePaths } from '../liveHooks'
 import { pointAlong, roadTrack, snapToRoad } from '../liveMath'
-import { roadRoute } from '../routing'
+import { roadRoute, straightLine } from '../routing'
 
 const GLIDE_MS = 1900      // a little under the 2 s telemetry interval, so the bus keeps moving
 const SNAP_IF_DEG = 0.02   // ~2 km: a jump that big (e.g. backlog replay) is snapped, not animated
@@ -55,8 +55,6 @@ function useGlide(target, track) {
 
   return [pos ?? (lat == null ? null : [lat, lng]), offM]
 }
-
-const straightLine = (route) => [CAMPUS, ...[...route.stop_points].reverse().map((p) => [p.lat, p.lng])]
 
 // The line each route is drawn with, and the road its buses are kept on: the approved road path from the GPS
 // project; else a road-snapped line between the stops (OSRM, cached); else straight lines until that arrives.

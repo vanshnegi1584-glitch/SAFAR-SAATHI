@@ -3,6 +3,8 @@
 // snaps the line to actual roads. Results are cached in memory + sessionStorage, keyed
 // by the stop coordinates, so we never re-fetch the same route twice in a session.
 
+import { CAMPUS } from './geo.js'
+
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving/'
 const memCache = new Map()
 
@@ -25,6 +27,16 @@ function writeSessionCache(key, coords) {
   } catch {
     // storage full or unavailable: skip persistence, memory cache still works
   }
+}
+
+// Campus, then the route's stops from the one nearest campus out to the first pickup.
+export const straightLine = (route) => [CAMPUS, ...[...route.stop_points].reverse().map((p) => [p.lat, p.lng])]
+
+// The line a route is drawn with on the map, campus -> far end: its approved road path (stored first pickup -> campus),
+// else the road OSRM finds through its stops, else straight lines between them.
+export async function routeLine(route, approved) {
+  if (approved?.length >= 2) return [...approved].reverse()
+  return (await roadRoute(straightLine(route))) ?? straightLine(route)
 }
 
 // points: array of [lat, lng], in travel order (at least 2). Returns a promise of

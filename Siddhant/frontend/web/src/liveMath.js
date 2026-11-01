@@ -76,6 +76,27 @@ export function pointAlong(track, d) {
   return [a.at[0] + (b.at[0] - a.at[0]) * t, a.at[1] + (b.at[1] - a.at[1]) * t]
 }
 
+/** The positions a demo bus ("Simulate route" on the driver page) sends, one per step: along `line` ([lat, lng], the
+ *  route's road as the map draws it, campus -> far end) every `stepM` metres, holding `hold` extra steps where each
+ *  of `stops` ([lat, lng]) meets the road, out to the far end and back again, so looping it never jumps. */
+export function demoDrive(line, stops, stepM, hold) {
+  const track = roadTrack(line)
+  if (!track) return []
+  const length = track.at(-1).along
+  const marks = [...new Set(stops.map((p) => projectOnto(track, p).along).filter((d) => d > 0 && d < length))]
+    .sort((a, b) => a - b)
+  const out = [track[0].at]
+  let d = 0
+  for (const m of [...marks, length]) {
+    while (d < m) {
+      d = Math.min(d + stepM, m)
+      out.push(pointAlong(track, d))
+    }
+    for (let i = 0; i < hold; i++) out.push(out.at(-1))
+  }
+  return [...out, ...out.slice(1, out.length - 1 - hold).reverse()]   // back again (the far-end wait only once)
+}
+
 /** Route as a path for one direction: 'in' = first pickup -> campus, 'out' = campus -> first pickup.
  *  With `roadPath` (the approved road path from the GPS project, [lat, lng] first pickup -> campus) distances follow
  *  the road and each stop sits where it meets the road; without it, straight lines between stops.
