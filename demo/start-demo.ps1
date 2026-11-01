@@ -11,41 +11,22 @@ If the camera window is closed by mistake it restarts by itself; stop everything
 Run from anywhere:   powershell -ExecutionPolicy Bypass -File D:\SAFAR-SAATHI\demo\start-demo.ps1
 Options:  -NoSimulator   only bus 18 (camera + its GPS from the driver app), no simulated buses
           -NoTransitLink skip the TransitLink dispatcher website (:3000)
+          -Lan           let phones on this laptop's Mobile Hotspot reach the backend (:8000) and website (:5173),
+                         e.g. the Android app. Everything else stays reachable from this laptop only.
 
 Needs (already set up on this laptop): vision\.venv, Siddhant\backend\.venv + .env, Siddhant\frontend\web\node_modules
 + .env.local, GPS\node_modules + apps\tracking-server\.env. Local development only: uses the GPS server's dev tokens.
 #>
-param([switch]$NoSimulator, [switch]$NoTransitLink)
+param([switch]$NoSimulator, [switch]$NoTransitLink, [switch]$Lan)
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Dev = 'dev:00000000-0000-4000-8000-00000000a001'   # dev:local admin token (in-memory dev server only)
 $Running = Join-Path $PSScriptRoot '.running.json'
 $started = @()
+$Bind = if ($Lan) { '0.0.0.0' } else { '127.0.0.1' }   # only the backend and website listen on the network
+$HotspotIp = '192.168.137.1'                           # Windows Mobile Hotspot always gives the laptop this address
 
-function Start-Part($title, $dir, $command) {
-  # -EncodedCommand: no quoting problems with JSON settings or paths.
-  $script = "`$Host.UI.RawUI.WindowTitle = 'SafarSaathi - $title'`n$command"
-  $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
-  $p = Start-Process powershell.exe -WorkingDirectory $dir -PassThru `
-    -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $enc
-  $script:started += [pscustomobject]@{ title = $title; pid = $p.Id }
-  $script:started | ConvertTo-Json | Set-Content -Encoding utf8 $Running
-  Write-Host "  started: $title"
-}
-
-function Test-Port($port) {
-  $c = New-Object System.Net.Sockets.TcpClient
-  try { return $c.ConnectAsync('127.0.0.1', $port).Wait(400) -and $c.Connected } catch { return $false } finally { $c.Dispose() }
-}
-
-function Wait-Port($port, $what, $seconds = 150) {
-  $deadline = (Get-Date).AddSeconds($seconds)
-  while ((Get-Date) -lt $deadline) {
-    if (Test-Port $port) { Write-Host "  ready:   $what (port $port)"; return }
-    Start-Sleep -Milliseconds 700
-  }
-  throw "$what did not start on port $port within $seconds s. Look at its window for the error, then run demo\stop-demo.ps1."
-}
+. (Join-Path $PSScriptRoot 'lib.ps1')
 
 $ports = @(8010, 4000, 8000, 5173) + $(if ($NoTransitLink) { @() } else { @(3000) })
 $busy = $ports | Where-Object { Test-Port $_ }
@@ -80,7 +61,7 @@ try {
 
 # 3. SafarSaathi backend (Siddhant) against the team database.
 Start-Part 'SafarSaathi backend' (Join-Path $Root 'Siddhant\backend') `
-  '.\.venv\Scripts\uvicorn.exe main:app --host 127.0.0.1 --port 8000'
+  ".\.venv\Scripts\uvicorn.exe main:app --host $Bind --port 8000"
 Wait-Port 8000 'SafarSaathi backend'
 
 # 4. Simulated buses on the 7 test routes (bus 18 included: its GPS; its people count comes from the camera).
@@ -93,7 +74,7 @@ Start-Part 'GPS feed to SafarSaathi' (Join-Path $Root 'Siddhant') `
   ".\backend\.venv\Scripts\python.exe -u tools\gps_feed.py --tracking http://localhost:4000 --tracking-token $Dev --backend http://127.0.0.1:8000 --counts-from ir"
 
 # 6. Websites.
-Start-Part 'SafarSaathi website' (Join-Path $Root 'Siddhant\frontend\web') 'npm run dev -- --host 127.0.0.1 --port 5173 --strictPort'
+Start-Part 'SafarSaathi website' (Join-Path $Root 'Siddhant\frontend\web') "npm run dev -- --host $Bind --port 5173 --strictPort"
 if (-not $NoTransitLink) {
   Start-Part 'TransitLink dispatcher website' (Join-Path $Root 'GPS') 'npm run dev:web'
 }
@@ -118,4 +99,12 @@ if (-not $NoTransitLink) {
 Write-Host ""
 Write-Host "Demo running. Website: http://localhost:5173/live (public) - log in for the passenger / staff / office pages."
 Write-Host "The camera window shows the AI detections; the bus 18 count updates on the website about every second."
+if ($Lan) {
+  $onHotspot = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object IPAddress -eq $HotspotIp
+  Write-Host ""
+  Write-Host "Phones on this laptop's Mobile Hotspot:"
+  Write-Host "  Website and Android app download: http://${HotspotIp}:5173"
+  Write-Host "  Backend used by the Android app:  http://${HotspotIp}:8000"
+  if (-not $onHotspot) { Write-Host "  Mobile Hotspot looks off ($HotspotIp not found): turn it on in Windows Settings > Network & internet." }
+}
 Write-Host "Stop everything: powershell -ExecutionPolicy Bypass -File `"$PSScriptRoot\stop-demo.ps1`""

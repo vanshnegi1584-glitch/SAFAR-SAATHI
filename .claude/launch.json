@@ -1,0 +1,50 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gps-dispatcher-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "GPS",
+        "run",
+        "dev:web"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "siddhant-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "Siddhant/frontend/web",
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "siddhant-web-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "Siddhant/frontend/web",
+        "run",
+        "preview",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
+    }
+  ]
+}
