@@ -1,0 +1,3 @@
+{
+  "_comment": "Copy to stop-aliases.json. Maps a stop id to the stop id it is really the same place as. Only add a pair after checking on the ground/map — the importer lists candidates as 'possible_duplicate_stop' but never merges them itself. Example: \"stop-premnagar\": \"stop-prem-nagar\""
+}

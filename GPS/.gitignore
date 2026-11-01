@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+dist/
+.expo/
+*.tsbuildinfo
+.env*.local
+.DS_Store
+.env
+# The real schedule has drivers' personal phone numbers — keep it out of git.
+data/*.csv
+!data/*.example.csv

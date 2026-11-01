@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+node_modules/
+dist/
+*.pt
+ml/artifacts/
+ml/trips_synthetic.csv
+vision/*.mp4
+.env
+.env.*
+!.env.example
+!.env.android.example
+.pytest_cache/
+backend/import_data/
+firmware/.pio/
+firmware/include/secrets.h
+firmware/test/host/*.exe
+firmware/test/host/out.txt
+
+# Generated account lists with plaintext passwords: never commit (public repo)
+*credentials*.csv
+
+# Android app (frontend/web): the signing key never goes in the repo, and built APKs are not committed
+*.jks
+*.keystore
+keystore.properties
+frontend/web/public/downloads/*.apk
+frontend/web/public/downloads/latest.json

@@ -1,9 +1,34 @@
-vision/.venv/
-vision/__pycache__/
-vision/**/__pycache__/
-vision/.pytest_cache/
+# Python environments & caches
+**/.venv/
+.venv/
+**/__pycache__/
+__pycache__/
+**/.pytest_cache/
+.pytest_cache/
+
+# Node dependencies & package managers
+**/node_modules/
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+**/dist/
+dist/
+**/build/
+build/
+**/.next/
+.next/
+**/out/
+out/
+**/.expo/
+.expo/
+**/.turbo/
+.turbo/
+*.tsbuildinfo
+
+# Ultralytics & Vision
 vision/.ultralytics/
-vision/*.pt
 vision/evaluation/
 vision/*.mp4
 vision/*.avi
@@ -11,19 +36,62 @@ vision/*.jpg
 vision/*.png
 vision/*.log
 vision/telemetry*.json
-
-# Transport schedule: contains driver names and phone numbers. Never commit.
-SafarSaathi_Bus_Schedule.csv
-*[Ss]chedule*.csv
-# Training data (bus images may show passengers)
 vision/datasets/
 vision/runs/
-# Model weights downloaded by Ultralytics (e.g. its AMP check)
+ml/artifacts/
+ml/trips_synthetic.csv
+
+# Model weights
 weights/
 *.pt
 
-# Teammate repositories cloned inside this one (they have their own git history)
-GPS/
-Bus management system/
-Siddhant/
+# Firmware build artifacts & secrets
+firmware/.pio/
+firmware/include/secrets.h
+firmware/test/host/*.exe
+firmware/test/host/out.txt
+
+# Environment variables & secrets (NEVER commit secrets!)
+**/.env
+**/.env.*
+.env
+.env.*
+!**/.env.example
+!**/.env.*.example
+!**/.env.android.example
+
+# Supabase local temp
+**/.supabase/
+**/supabase/.temp/
+
+# Schedules & files containing driver personal phone numbers / PII
+SafarSaathi_Bus_Schedule.csv
+*[Ss]chedule*.csv
+*credentials*.csv
+data/*.csv
+!data/*.example.csv
+
+# Keystores & Android builds
+*.jks
+*.keystore
+keystore.properties
+frontend/web/public/downloads/*.apk
+frontend/web/public/downloads/latest.json
+
+# Demo run tracker
 demo/.running.json
+
+# Local git backups for nested repos
+**/.git_backup/
+.git_backup/
+
+# IDE & Gradle caches
+**/.gradle/
+**/.idea/
+.gradle/
+.idea/
+
+# OS artifacts & logs
+.DS_Store
+Thumbs.db
+*.log

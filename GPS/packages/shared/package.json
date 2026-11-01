@@ -1,0 +1,20 @@
+{
+  "name": "@transitlink/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/google.maps": "^3.66.9",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "TransitLink",
+    "slug": "transitlink",
+    "scheme": "transitlink",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.geu.transitlink"
+    },
+    "android": {
+      "package": "in.geu.transitlink",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "Drivers: while a trip is running, TransitLink shares the bus's location with students on your route, even with the screen off. Tracking stops when you end the trip.",
+          "locationWhenInUsePermission": "Students: shows your position, nearby stops and your bus (your location stays on this phone). Drivers: shares the bus's location during a trip."
+        }
+      ],
+      "expo-notifications",
+      "expo-secure-store",
+      "react-native-maps"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

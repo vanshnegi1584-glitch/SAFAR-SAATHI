@@ -1,0 +1,22 @@
+{
+  "appId": "in.ac.gehu.safarsaathi",
+  "appName": "SafarSaathi",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DARK"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_safarsaathi",
+      "iconColor": "#1e3a8a"
+    }
+  }
+}

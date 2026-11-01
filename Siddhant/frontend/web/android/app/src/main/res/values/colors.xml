@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same blue as theme-color in index.html and the web manifest -->
+    <color name="safarsaathi_blue">#1E3A8A</color>
+</resources>

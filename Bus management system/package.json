@@ -1,0 +1,38 @@
+{
+  "name": "safarsaathi",
+  "version": "1.0.0",
+  "description": "SafarSaathi - Bus Management System backend and data repository powered by Supabase",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "demo": "tsx src/examples/demo.ts",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:reset": "supabase db reset",
+    "supabase:gen-types": "supabase gen types typescript --local > src/types/database.types.ts"
+  },
+  "keywords": [
+    "supabase",
+    "bus-management-system",
+    "safarsaathi",
+    "transit",
+    "ticketing",
+    "realtime-tracking",
+    "postgresql"
+  ],
+  "author": "Vidarbh14",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SafarSaathi</string>
+    <string name="title_activity_main">SafarSaathi</string>
+    <string name="package_name">in.ac.gehu.safarsaathi</string>
+    <string name="custom_url_scheme">in.ac.gehu.safarsaathi</string>
+    <!-- Ongoing notification while a driver shares the bus location (@capacitor-community/background-geolocation) -->
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_safarsaathi</string>
+    <string name="capacitor_background_geolocation_notification_color">#1E3A8A</string>
+    <string name="capacitor_background_geolocation_notification_channel_name">Bus location sharing</string>
+</resources>
