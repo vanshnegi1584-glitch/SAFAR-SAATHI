@@ -36,6 +36,8 @@ export async function api(path, { method = 'GET', body } = {}) {
   return json
 }
 
+// This device only. Supabase's default ("global") ends the account's sessions on every device, so one expired token
+// (a 401 here logs out) or pressing Log out on the phone would sign the same account out of the website too.
 export async function logout() {
-  await supabase.auth.signOut()
+  await supabase.auth.signOut({ scope: 'local' })
 }
