@@ -16,6 +16,9 @@ if not SUPABASE_URL:
 
 ISSUER = f"{SUPABASE_URL}/auth/v1"
 _jwks = jwt.PyJWKClient(f"{ISSUER}/.well-known/jwks.json", cache_keys=True, lifespan=3600)
+# Clock skew allowed between Supabase and this server. With none, a server clock even half a second behind rejects a
+# token used right after login ("not yet valid (iat)"), and the app then logs the user straight back out.
+CLOCK_LEEWAY_S = 30
 STAFF_ROLES = {"driver", "conductor"}
 ADMIN_ROLES = {"dispatcher"}
 
@@ -28,7 +31,7 @@ def _decode(token: str) -> dict:
         key, algorithms = JWT_SECRET, ["HS256"]
     else:
         key, algorithms = _jwks.get_signing_key_from_jwt(token).key, ["RS256", "ES256"]
-    return jwt.decode(token, key, algorithms=algorithms, audience="authenticated", issuer=ISSUER)
+    return jwt.decode(token, key, algorithms=algorithms, audience="authenticated", issuer=ISSUER, leeway=CLOCK_LEEWAY_S)
 
 
 def current_user(authorization: str | None = Header(default=None)) -> dict:
